@@ -31,12 +31,13 @@ output, stop. Keep serials in the operator-selected private evidence record outs
   (a) Vendor patch rule: Fairphone warns that flashing an OS with an older
   security-patch date than the previously installed OS can brick on relock —
   compare patch dates, newest wins, never downgrade.
-  (b) AVB index rule: each vbmeta descriptor carries a rollback_index for its
-  partition; the bootloader compares it against the matching stored index in
-  tamper-evident storage and refuses older values. Patch dates and stored
+  (b) AVB index rule: each relevant authenticated VBMeta carries a
+  rollback_index in its header; for chained partitions the chain descriptor
+  supplies the index location. The bootloader compares each index against the
+  matching stored location and refuses older values. Patch dates and stored
   indices are different kinds of values — both must independently allow the
   target; an unreadable index is a stop, never an assumption.
-  Source: AOSP AVB README (Rollback Protection).
+  Source: AOSP AVB README (Rollback Protection) and avb_vbmeta_image.h.
 - `unlock` then `unlock_critical`, each wipes; `unlock_critical` fails with
   `Flashing Unlock is not allowed` unless the first unlock + on-screen approval
   completed and ability is `1`.
@@ -49,9 +50,10 @@ output, stop. Keep serials in the operator-selected private evidence record outs
    Flags `3` boots unlocked but fails locked.
 4. Slot states known (`getvar all`; no half-flashed slot).
 5. Rollback allowed twice over: (a) target patch date ≥ installed patch date;
-   (b) every target image rollback_index ≥ the corresponding stored index
+   (b) every relevant authenticated VBMeta index (header index; chain-descriptor
+   location for chained partitions) ≥ the corresponding stored location
    (locations discovered on-device via `fastboot getvar all` + vbmeta
-   descriptors in unlock and stock restoration testing; unreadable/unproven → stop).
+   inspection in unlock and stock restoration testing; unreadable/unproven → stop).
 6. `get_unlock_ability` returns `1` immediately before EACH lock command.
 
 ## Unlock route binding (do not assume one flow)
