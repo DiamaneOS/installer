@@ -25,9 +25,17 @@ output, stop. Keep serials in the operator-selected private evidence record outs
 - Relock needs the complete §4.1 checklist below on this exact device — variant
   + firmware, full compatible images, AVB chain, slots, rollback indices, and
   the `lock_critical`-then-`lock` order with Vol-Down reboot between.
-- Anti-rollback: never flash an image with an older security patch than the
-  device's stored rollback index and relock — fatal when locked, ignored when
-  unlocked. Patch level, not Android version, controls it.
+- Two separate rollback rules (do not mix them):
+  (a) Vendor patch rule: Fairphone warns that flashing an OS with an older
+  security-patch date than the previously installed OS can brick on relock —
+  compare patch dates, newest wins, never downgrade.
+  (b) AVB index rule: each relevant authenticated VBMeta carries a
+  rollback_index in its header; for chained partitions the chain descriptor
+  supplies the index location. The bootloader compares each index against the
+  matching stored location and refuses older values. Patch dates and stored
+  indices are different kinds of values — both must independently allow the
+  target; an unreadable index is a stop, never an assumption.
+  Source: AOSP AVB README (Rollback Protection) and avb_vbmeta_image.h.
 - `unlock` then `unlock_critical`, each wipes; `unlock_critical` fails with
   `Flashing Unlock is not allowed` unless the first unlock + on-screen approval
   completed and ability is `1`.
@@ -39,7 +47,11 @@ output, stop. Keep serials in the operator-selected private evidence record outs
 3. AVB chain reviewed: vbmeta Flags `0` expected for verification on;
    Flags `3` boots unlocked but fails locked.
 4. Slot states known (`getvar all`; no half-flashed slot).
-5. Rollback indices known; target patch level ≥ stored index.
+5. Rollback allowed twice over: (a) target patch date ≥ installed patch date;
+   (b) every relevant authenticated VBMeta index (header index; chain-descriptor
+   location for chained partitions) ≥ the corresponding stored location
+   (locations discovered on-device via `fastboot getvar all` + vbmeta
+   inspection in unlock and stock restoration testing; unreadable/unproven → stop).
 6. `get_unlock_ability` returns `1` immediately before EACH lock command.
 
 ## Unlock route binding (do not assume one flow)
