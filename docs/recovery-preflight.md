@@ -16,7 +16,9 @@ Sources (retrieved 2026-09-10):
   15 factory package FP6.QREL.15.178.0 has been downloaded and its published
   SHA-256 reproduced twice. The phone explicitly offers the EU
   FP6.QREL.16.100.0 update; its matching official factory package is also
-  downloaded and hash-verified. The phone has not been updated.
+  downloaded and hash-verified. Both accepted archives also have an
+  owner-confirmed, hash-matching independent cloud copy. The phone has not been
+  updated.
 
 ## Identity rule (every destructive phase)
 
