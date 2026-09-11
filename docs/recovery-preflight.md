@@ -11,7 +11,12 @@ Sources (retrieved 2026-09-10):
   support case): <https://www.fairphone.com/bootloader-unlocking-code-for-fairphone>
 - LineageOS FP6 install wiki (Vol Down+Power, partition set):
   <https://wiki.lineageos.org/devices/FP6/install/>
-- source research stock ledger (factory FP6.QREL.16.95.0 / OTA 16.82.0 proposal).
+- verified recovery-input inventory in `diamaneos-tools/config/stock-inputs.json`:
+  the received phone remains on FP6.QREL.15.176.0; the official final Android
+  15 factory package FP6.QREL.15.178.0 has been downloaded and its published
+  SHA-256 reproduced twice. The phone explicitly offers the EU
+  FP6.QREL.16.100.0 update; its matching official factory package is also
+  downloaded and hash-verified. The phone has not been updated.
 
 ## Identity rule (every destructive phase)
 
@@ -103,11 +108,18 @@ any `0`/denial → support path, no force flags, no verity disables as repair.
 
 Prereqs: stock recovery archiving verified factory package for the EXACT build/model + hashes
 (record these recovery-input fields privately:
-build_id, source_url, hash_sha256, all unresolved until download).
+build_id, source_url and hash_sha256; all must resolve to the accepted archive).
 Use Fairphone's manual-install guide for that package only. Destructive: full
 wipe. Stop: incompatible model/build hash, unknown rollback index, or ability
 `0` where an unlock may be needed → stop. Exit: cold boot to stock + basic
 checks (unlock and stock restoration testing owns the test).
+
+The official FP6 factory script verifies an embedded checksum list by default,
+but its current implementation can continue if no checksum utility is found.
+That fallback is not accepted here. Before any flash, independently verify the
+complete archive against Fairphone's published SHA-256 and verify the embedded
+declared files with a known available checksum tool. Archive inspection alone
+does not prove restoration, rollback safety or relock readiness.
 
 ## Phase 4 — Stock relock (destructive, human-led, highest risk)
 
