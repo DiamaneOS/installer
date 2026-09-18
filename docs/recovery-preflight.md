@@ -10,13 +10,15 @@ Sources (retrieved 2026-09-10):
 - Fairphone bootloader-code page (toggle + online verification; ability `0` →
   support case): <https://www.fairphone.com/bootloader-unlocking-code-for-fairphone>
 - verified recovery-input inventory in `diamaneos-tools/config/stock-inputs.json`:
-  the received phone remains on FP6.QREL.15.176.0; the official final Android
-  15 factory package FP6.QREL.15.178.0 has been downloaded and its published
-  SHA-256 reproduced twice. The phone explicitly offers the EU
-  FP6.QREL.16.100.0 update; its matching official factory package is also
-  downloaded and hash-verified. Both accepted archives also have a
-  confirmed, hash-matching independent cloud copy. The phone has not been
-  updated.
+  the arrival snapshot was FP6.QREL.15.176.0. The official OTA was subsequently
+  installed; the current accepted checkpoint is locked, green-verified EU
+  Android 16 FP6.QREL.16.100.0 (security patch 2026-08-05). Its matching
+  official factory package is the current EU restore-selection input. The
+  official final Android 15 package FP6.QREL.15.178.0 remains a historical
+  verified input, not the current selection. Both archives reproduced their
+  published SHA-256 twice and have a confirmed, hash-matching independent
+  cloud copy. Neither archive has been restored, and selection does not prove
+  rollback-index, AVB, slot or relock safety.
 
 ## Identity rule (every destructive phase)
 
