@@ -18,8 +18,9 @@ Sources (retrieved 2026-09-10):
   official factory package is the current EU restore-selection input. The
   official final Android 15 package FP6.QREL.15.178.0 remains a historical
   verified input, not the current selection. Both archives reproduced their
-  published SHA-256 twice and have an owner-confirmed, hash-matching independent
-  cloud copy. Neither archive has been restored, and selection does not prove
+  published SHA-256 twice. Private custody requires a separately verified
+  independent copy before destructive work. Neither archive has been restored,
+  and selection does not prove
   rollback-index, AVB, slot or relock safety.
 
 ## Identity rule (every destructive phase)
@@ -98,7 +99,7 @@ stop. Exit: original state preserved (stock recovery archiving owns archives).
 
 ## Phase 2 — Unlock (destructive, human-led)
 
-Prereqs: backup done, owner accepts double wipe, bound unlock route above,
+Prereqs: backup done, the operator explicitly authorizes both wipes, bound unlock route above,
 online verification available.
 Sequence (code-free route, per Fairphone support): toggle → wait for verify →
 `adb reboot bootloader` → `fastboot flashing unlock` + on-screen approve

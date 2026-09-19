@@ -1,0 +1,27 @@
+# Local and private operator state — never commit
+.DS_Store
+*.log
+*.orig
+*.rej
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*id_rsa*
+*id_ed25519*
+secrets*.json
+*token*.json
+*serial*.txt
+private/
+evidence/
+downloads/
+out/
+
+# Maintainer-private planning bundles
+*diamaneos-development-plan*.md
+*diamaneos-task-packets*/
+*TASK-AUDIT*.md

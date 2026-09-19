@@ -12,6 +12,13 @@ actual device. It is not a validated installation procedure for DiamaneOS.
 The planned CLI and WebUSB installers will share an installation and recovery
 behavior contract. Neither installer is implemented in this repository yet.
 
+The current preflight is device-specific but host-portable: it relies on the
+official Android platform tools, exact content hashes and device identity, not
+on a maintainer's workstation paths or USB topology. It deliberately does not
+turn unvalidated destructive steps into a copy-and-paste installation recipe.
+Private serials, backups, account state and execution evidence stay outside
+this public repository.
+
 ## Licence
 
 Original DiamaneOS code and documentation in this repository are licensed
