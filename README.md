@@ -11,3 +11,10 @@ actual device. It is not a validated installation procedure for DiamaneOS.
 
 The planned CLI and WebUSB installers will share an installation and recovery
 behavior contract. Neither installer is implemented in this repository yet.
+
+## Licence
+
+Original DiamaneOS code and documentation in this repository are licensed
+under [Apache-2.0](LICENSE), except where another licence is identified.
+See [NOTICE](NOTICE) for attribution. Referenced upstream software retains
+its own licences; this repository's licence does not relicense those works.
