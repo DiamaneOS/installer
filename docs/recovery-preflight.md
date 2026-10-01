@@ -11,8 +11,6 @@ Sources (retrieved 2026-09-10):
   <https://support.fairphone.com/hc/en-us/articles/10492476238865-How-to-unlock-or-lock-your-Fairphone-s-bootloader>
 - Fairphone bootloader-code page (toggle + online verification; ability `0` →
   support case): <https://www.fairphone.com/bootloader-unlocking-code-for-fairphone>
-- LineageOS FP6 install wiki (Vol Down+Power, partition set):
-  <https://wiki.lineageos.org/devices/FP6/install/>
 - verified recovery-input inventory in `diamaneos-tools/config/stock-inputs.json`:
   the arrival snapshot was FP6.QREL.15.176.0. The official OTA was subsequently
   installed; the current accepted checkpoint is locked, green-verified EU
@@ -158,8 +156,7 @@ Validated EU package facts:
 
 Prereqs: Phase 3 booted stock, ALL §4.1 checklist items green on this exact
 device. Expected trust state here is **green** (Fairphone OEM root) —
-**yellow** belongs only to the later custom-key enrollment in Phase 5, never
-to stock restoration.
+**yellow** (custom root) never belongs to stock restoration.
 Order per Fairphone support: `fastboot flashing lock_critical` + on-screen
 steps → hold Vol-Down into fastboot → `fastboot flashing lock`. Identity
 recheck plus `get_unlock_ability` immediately before EACH lock; refuse on
@@ -200,13 +197,6 @@ This sequence passed a final full power-off cold boot plus display/touch/buttons
 camera/video, microphone/speaker, Wi-Fi/Bluetooth and USB charging/ADB checks.
 No anti-rollback bypass, force flag, verity disable or fabricated B-slot content
 was used.
-
-## Phase 5 — Later custom enrollment (not in this runbook run)
-
-Requires a test-key candidate build, a validated custom-key relock procedure and an independent
-fingerprint reference. Expected state there is yellow (custom root), verified
-against the out-of-band fingerprint — not against this stock phase.
-Not authorized by this stock-recovery validation.
 
 ## Recovery assets and data loss
 
