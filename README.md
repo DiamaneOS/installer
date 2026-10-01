@@ -9,8 +9,7 @@ The repository currently contains the
 references, prerequisites and stop conditions for validating recovery on the
 actual device. It is not a validated installation procedure for DiamaneOS.
 
-The planned CLI and WebUSB installers will share an installation and recovery
-behavior contract. Neither installer is implemented in this repository yet.
+No installer is implemented in this repository.
 
 The current preflight is device-specific but host-portable: it relies on the
 official Android platform tools, exact content hashes and device identity, not
