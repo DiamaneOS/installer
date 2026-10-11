@@ -21,7 +21,7 @@ evidence/
 downloads/
 out/
 
-# Maintainer-private planning bundles
+# Local planning files
 *diamaneos-development-plan*.md
 *diamaneos-task-packets*/
 *TASK-AUDIT*.md
