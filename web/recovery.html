@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <title>If an install fails | DiamaneOS</title>
+        <link rel="stylesheet" href="style.css"/>
+        <meta name="description" content="What to do when a DiamaneOS install stops part way."/>
+        <meta name="color-scheme" content="dark light"/>
+        <meta name="referrer" content="no-referrer"/>
+        <link rel="license" href="LICENSE"/>
+    </head>
+    <body>
+        <main id="recovery">
+            <h1><a href="#recovery">If an install fails</a></h1>
+
+            <p>A phone that reaches Fastboot Mode can be installed again. Find the case that fits and follow
+            it. Back to the <a href="index.html">web installer</a>.</p>
+
+            <section id="fastboot-mode">
+                <h2><a href="#fastboot-mode">Getting back to Fastboot Mode</a></h2>
+
+                <ul>
+                    <li>Hold Power and Volume down until the phone restarts and shows Fastboot Mode.</li>
+                    <li>If it starts Android or keeps restarting on the logo, hold both again.</li>
+                    <li>Then press Connect on the installer page. Reload the page first if it shows an error
+                    about the USB device.</li>
+                </ul>
+            </section>
+
+            <section id="before-writing">
+                <h2><a href="#before-writing">It stopped before writing</a></h2>
+
+                <ul>
+                    <li>A check failed: the phone, its lock state or a file of the image set.</li>
+                    <li>Nothing on the phone changed. Fix what the message names and start again.</li>
+                    <li>A file that does not match <code>SHA256SUMS</code> is damaged or altered. Get the
+                    image set again.</li>
+                </ul>
+            </section>
+
+            <section id="during-writing">
+                <h2><a href="#during-writing">A write failed or the phone stopped answering</a></h2>
+
+                <ul>
+                    <li>After a partial install the phone may not start, or it may keep restarting. It can
+                    still be installed.</li>
+                    <li>Bring it to Fastboot Mode, connect it and press Install again. The install writes
+                    everything again from the start.</li>
+                    <li>If it fails at the same place twice, try another USB port or cable, without a
+                    hub.</li>
+                </ul>
+            </section>
+
+            <section id="super">
+                <h2><a href="#super">It stopped while writing super</a></h2>
+
+                <ul>
+                    <li>The bootloader sometimes stops answering after the first part of super. Only a forced
+                    restart frees it.</li>
+                    <li>The installer then offers to continue in fastbootd. It writes each system partition
+                    there, then returns to the bootloader for the last steps.</li>
+                    <li>If the page was closed, run the whole install again. If it stops at super again, use
+                    the fastbootd steps it offers.</li>
+                </ul>
+            </section>
+
+            <section id="fastbootd">
+                <h2><a href="#fastbootd">fastbootd does not start or fails</a></h2>
+
+                <ul>
+                    <li>Bring the phone to Fastboot Mode and run the whole install again.</li>
+                    <li>If fastbootd fails again, return to the stock OS as below, then install again.</li>
+                </ul>
+            </section>
+
+            <section id="stock">
+                <h2><a href="#stock">Returning to the stock OS</a></h2>
+
+                <ul>
+                    <li>Install Fairphone's factory package with
+                    <a href="https://support.fairphone.com/hc/en-us/articles/18896094650513-How-to-manually-install-Android-on-your-Fairphone" rel="noreferrer">Fairphone's
+                    instructions</a>.</li>
+                    <li>Relock only on the stock OS, and only after the checks in the
+                    <a href="https://github.com/DiamaneOS/installer/blob/main/docs/recovery-preflight.md" rel="noreferrer">recovery
+                    preflight</a>.</li>
+                </ul>
+            </section>
+
+            <section id="never">
+                <h2><a href="#never">Never do these to fix a failed install</a></h2>
+
+                <ul>
+                    <li>Do not lock the bootloader. A locked phone that does not start may not be
+                    recoverable.</li>
+                    <li>Do not run <code>fastboot -w</code> or <code>fastboot erase</code>. The install
+                    writes empty images instead.</li>
+                    <li>Do not switch to slot b. It holds no operating system.</li>
+                    <li>Do not install firmware older than the phone already runs.</li>
+                </ul>
+            </section>
+
+            <section id="help">
+                <h2><a href="#help">Asking for help</a></h2>
+
+                <p>Copy the Log at the end of the installer page into your report. It holds no serial
+                numbers.</p>
+            </section>
+        </main>
+    </body>
+</html>

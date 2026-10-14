@@ -1,0 +1,304 @@
+// @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&dn=expat.txt MIT
+
+import {
+    CRITICAL_UNLOCKED, PRODUCT, checks, command, isSparse, lockAllowed, withAvbFooter, writesFirmware,
+} from "./package.js";
+
+// A USB transfer the phone leaves unanswered this long counts as a stall. A
+// part of super takes about 20 seconds to send, with transfers every few ms.
+export const STALL_SECONDS = 60;
+
+export class PhoneError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "PhoneError";
+    }
+}
+
+export class StallError extends Error {
+    constructor(seconds) {
+        super(`The phone stopped answering for ${seconds} seconds.`);
+        this.name = "StallError";
+    }
+}
+
+// Writing super stopped after the bootloader had taken at least one part.
+export class SuperStopped extends Error {
+    constructor(parts, cause) {
+        super(`Writing super stopped after part ${parts}. ${cause.message}`, { cause });
+        this.name = "SuperStopped";
+    }
+}
+
+// device: a fastboot.js FastbootDevice. ui: connect(), reconnect(message),
+// progress(text, fraction), waiting(seconds or null) and log(line).
+export class Flow {
+    #device;
+    #ui;
+    #stallMs;
+    #transfers = new WeakMap();
+    #superParts = 0;
+    // Set after super stopped part way, until the fastbootd steps finish.
+    resume = false;
+
+    constructor(device, ui, stallMs = STALL_SECONDS * 1000) {
+        this.#device = device;
+        this.#ui = ui;
+        this.#stallMs = stallMs;
+        const run = device.runCommand.bind(device);
+        device.runCommand = async (text) => {
+            const reply = await run(text);
+            if (text === "flash:super") {
+                this.#superParts++;
+            }
+            return reply;
+        };
+    }
+
+    // Counts the transfers in flight on the current USB device, which changes
+    // with every reconnection.
+    #watch() {
+        const usb = this.#device.device;
+        if (usb == null || this.#transfers.has(usb)) {
+            return;
+        }
+        const state = { pending: 0, since: 0 };
+        this.#transfers.set(usb, state);
+        for (const name of ["transferIn", "transferOut"]) {
+            const original = usb[name].bind(usb);
+            usb[name] = (...args) => {
+                state.pending++;
+                state.since = Date.now();
+                return original(...args).finally(() => {
+                    state.pending--;
+                    state.since = Date.now();
+                });
+            };
+        }
+    }
+
+    async #call(action) {
+        this.#watch();
+        const usb = this.#device.device;
+        const state = this.#transfers.get(usb) ?? { pending: 0 };
+        const work = action();
+        // A stalled transfer only settles once the device is closed.
+        work.catch(() => {});
+        let timer;
+        const stalled = new Promise((_, reject) => {
+            timer = setInterval(() => {
+                const waited = state.pending > 0 ? Date.now() - state.since : 0;
+                this.#ui.waiting(waited >= 10000 ? Math.floor(waited / 1000) : null);
+                if (waited > this.#stallMs) {
+                    reject(new StallError(Math.round(this.#stallMs / 1000)));
+                }
+            }, Math.min(1000, this.#stallMs / 4));
+        });
+        try {
+            return await Promise.race([work, stalled]);
+        } catch (error) {
+            if (error instanceof StallError) {
+                usb?.close().catch(() => {});
+            }
+            throw error;
+        } finally {
+            clearInterval(timer);
+            this.#ui.waiting(null);
+        }
+    }
+
+    getvar(name) {
+        return this.#call(() => this.#device.getVariable(name));
+    }
+
+    async #command(text) {
+        return (await this.#call(() => this.#device.runCommand(text))).text;
+    }
+
+    async #expect(name, wanted, message) {
+        if (await this.getvar(name) !== wanted) {
+            throw new PhoneError(message);
+        }
+    }
+
+    // The phone's state as far as the installer needs it. critical and ability
+    // are null in fastbootd or when the bootloader does not report them.
+    async state() {
+        const product = await this.getvar("product");
+        const userspace = await this.getvar("is-userspace");
+        const unlocked = await this.getvar("unlocked");
+        let critical = null;
+        let ability = null;
+        if (userspace !== "yes") {
+            try {
+                critical = (await this.#command("oem device-info")).includes(CRITICAL_UNLOCKED);
+                const match = /get_unlock_ability:\s*(\d+)/.exec(await this.#command("flashing get_unlock_ability"));
+                ability = match ? Number(match[1]) : null;
+            } catch (error) {
+                if (error.name !== "FastbootError") {
+                    throw error;
+                }
+            }
+        }
+        return { product, userspace, unlocked, critical, ability };
+    }
+
+    async #bootloaderChecks(record, critical) {
+        for (const check of checks(record)) {
+            await this.#expect(check.name, check.wanted, check.message);
+        }
+        if (critical && writesFirmware(record)
+                && !(await this.#command("oem device-info")).includes(CRITICAL_UNLOCKED)) {
+            throw new PhoneError("The critical partitions are locked, and the install writes firmware to them. "
+                + "Unlock them first.");
+        }
+    }
+
+    async #flash(partition, file, inBootloader, onProgress) {
+        let image = file;
+        if (inBootloader && file.size >= 64 && !(await isSparse(file))) {
+            const size = parseInt(await this.getvar(`partition-size:${partition}`) ?? "", 16);
+            image = await withAvbFooter(file, size);
+        }
+        await this.#call(() => this.#device.flashBlob(partition, image, onProgress));
+    }
+
+    async #run(pkg, steps, inBootloader) {
+        const where = inBootloader ? "" : " in fastbootd";
+        const sizes = steps.map((step) => (step.op === "flash" ? pkg.files.get(step.file).size : 0));
+        const total = sizes.reduce((sum, size) => sum + size, 0) || 1;
+        let done = 0;
+        for (const [i, step] of steps.entries()) {
+            this.#ui.log(command(step));
+            const count = `(${i + 1} of ${steps.length})`;
+            if (step.op === "flash") {
+                const before = this.#superParts;
+                const label = () => (step.partition === "super"
+                    ? `Writing super, part ${this.#superParts - before + 1} ${count}`
+                    : `Writing ${step.partition}${where} ${count}`);
+                this.#ui.progress(label(), done / total);
+                try {
+                    await this.#flash(step.partition, pkg.files.get(step.file), inBootloader,
+                        (fraction) => this.#ui.progress(label(), (done + fraction * sizes[i]) / total));
+                } catch (error) {
+                    if (step.partition === "super" && this.#superParts > before && pkg.fallback) {
+                        this.resume = true;
+                        throw new SuperStopped(this.#superParts - before, error);
+                    }
+                    throw error;
+                }
+                done += sizes[i];
+            } else if (step.op === "set-active") {
+                this.#ui.progress(`Selecting slot ${step.slot} ${count}`, done / total);
+                await this.#command(`set_active:${step.slot}`);
+            } else if (step.op === "reboot") {
+                await this.#command("reboot");
+            }
+        }
+        this.#ui.progress("Done", 1);
+    }
+
+    async install(pkg) {
+        this.resume = false;
+        await this.#ui.connect();
+        await this.#bootloaderChecks(pkg.record, true);
+        await this.#run(pkg, pkg.steps, true);
+    }
+
+    // After a stall in super: the logical partitions from fastbootd, then the
+    // rest of the install from the bootloader. The steps before super are done.
+    async fallback(pkg) {
+        const record = pkg.record;
+        const [product] = checks(record);
+        await this.#ui.connect();
+        await this.#expect("product", record.product, product.message);
+        if (await this.getvar("is-userspace") !== "yes") {
+            await this.#expect("unlocked", "yes", "The bootloader is locked. Unlock it first.");
+            this.#ui.log("fastboot reboot fastboot");
+            await this.#command("reboot-fastboot");
+            await this.#ui.reconnect("The phone is starting fastbootd.");
+            await this.#expect("is-userspace", "yes",
+                "The phone did not start fastbootd. Restart it into Fastboot Mode and try again.");
+            await this.#expect("product", record.product, product.message);
+        }
+        await this.#run(pkg, pkg.fallback.logical, false);
+        this.#ui.log("fastboot reboot bootloader");
+        await this.#command("reboot-bootloader");
+        await this.#ui.reconnect("The phone is restarting into Fastboot Mode.");
+        await this.#bootloaderChecks(record, false);
+        await this.#run(pkg, pkg.fallback.after, true);
+        this.resume = false;
+    }
+
+    async #checkedState() {
+        await this.#ui.connect();
+        const state = await this.state();
+        if (state.product !== PRODUCT) {
+            throw new PhoneError(`This installer is for the ${PRODUCT}, and the phone reports ${state.product}.`);
+        }
+        if (state.userspace === "yes") {
+            throw new PhoneError("The phone is in fastbootd. Restart it into Fastboot Mode and start again.");
+        }
+        if (state.critical === null || state.ability === null) {
+            throw new PhoneError("The bootloader did not report its lock state.");
+        }
+        return state;
+    }
+
+    async #lockCommand(text) {
+        this.#ui.log(`fastboot ${text}`);
+        try {
+            // Not timed: the bootloader may wait for the user's choice on the phone.
+            await this.#device.runCommand(text);
+        } catch (error) {
+            if (error.name === "FastbootError" && error.status === "FAIL") {
+                throw new PhoneError(`The bootloader refused: ${error.bootloaderMessage.trim()}`);
+            }
+            throw error;
+        }
+    }
+
+    async unlock(critical) {
+        const state = await this.#checkedState();
+        if (!critical && state.unlocked === "yes") {
+            return "The bootloader is already unlocked.";
+        }
+        if (critical && state.unlocked !== "yes") {
+            throw new PhoneError("Unlock the bootloader first.");
+        }
+        if (critical && state.critical) {
+            return "The critical partitions are already unlocked.";
+        }
+        if (state.ability !== 1) {
+            throw new PhoneError("The phone does not allow unlocking. Turn on OEM unlocking in Developer options "
+                + "and start again.");
+        }
+        await this.#lockCommand(critical ? "flashing unlock_critical" : "flashing unlock");
+        return "Confirm on the phone: choose to unlock with the volume buttons and press Power. It erases the "
+            + "phone and restarts. Hold Volume down while it restarts to return to Fastboot Mode.";
+    }
+
+    // One step per call: the critical partitions first, then the bootloader.
+    async lock(record) {
+        if (!lockAllowed(record)) {
+            throw new PhoneError(record.notice || "This image set must stay on an unlocked phone.");
+        }
+        const state = await this.#checkedState();
+        if (state.unlocked !== "yes" && !state.critical) {
+            return "The bootloader is locked.";
+        }
+        if (state.ability !== 1) {
+            throw new PhoneError("The phone no longer allows unlocking, so it could not be unlocked again if it "
+                + "failed to start. Do not lock it.");
+        }
+        if (state.critical) {
+            await this.#lockCommand("flashing lock_critical");
+            return "Confirm on the phone. Then hold Volume down while it restarts, so that it returns to Fastboot "
+                + "Mode without starting Android, and press Lock bootloader again.";
+        }
+        await this.#lockCommand("flashing lock");
+        return "Confirm on the phone. It erases the phone and locks the bootloader.";
+    }
+}
+
+// @license-end
