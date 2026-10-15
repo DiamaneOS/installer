@@ -8,6 +8,7 @@ Installation and recovery tools and documentation for DiamaneOS.
   browser over USB and locks the bootloader after it when the set allows that.
   - A [page for failed installs](web/recovery.html) and a guide for
     [returning to the stock OS](web/stock.html).
+  - [Hosting](docs/hosting.md): the host name, headers and deploy steps it needs.
 - [Install steps](docs/install-steps.md): how the web installer and the image set's `flash-all.sh`
   match, and how to keep them in step.
 - The [Fairphone 6 stock recovery preflight](docs/recovery-preflight.md):
