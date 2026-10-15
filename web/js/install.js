@@ -66,7 +66,7 @@ let lastProgress = ["", undefined];
 let waitingNote = "";
 
 function showProgress() {
-    setStatus(lastProgress[0] + waitingNote, lastProgress[1]);
+    setStatus([lastProgress[0], waitingNote].filter((text) => text !== "").join(". "), lastProgress[1]);
 }
 
 const device = new fastboot.FastbootDevice();
@@ -120,7 +120,7 @@ const flow = new Flow(device, {
         showProgress();
     },
     waiting(seconds) {
-        const note = seconds === null ? "" : `. Waiting for the phone: ${seconds} s`;
+        const note = seconds === null ? "" : `Waiting for the phone: ${seconds} s`;
         if (note !== waitingNote) {
             waitingNote = note;
             showProgress();

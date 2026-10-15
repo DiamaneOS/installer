@@ -4,9 +4,14 @@ import {
     CRITICAL_UNLOCKED, PRODUCT, checks, command, isSparse, lockAllowed, withAvbFooter, writesFirmware,
 } from "./package.js";
 
-// A USB transfer the phone leaves unanswered this long counts as a stall. A
-// part of super takes about 20 seconds to send, with transfers every few ms.
-export const STALL_SECONDS = 60;
+// How long the phone may leave a USB transfer unanswered before the installer
+// takes the bootloader for dead. A part of super takes about 20 seconds to send,
+// with transfers every few ms. Other commands answer within seconds. Unlocking
+// and locking may wait for the user's choice on the phone.
+export const SECONDS = { flash: 60, command: 30, confirm: 300 };
+
+const RESTART = "Hold Power and Volume down until it restarts into Fastboot Mode.";
+const DEAD = `The phone stopped answering. ${RESTART} Then try again.`;
 
 export class PhoneError extends Error {
     constructor(message) {
@@ -17,7 +22,7 @@ export class PhoneError extends Error {
 
 export class StallError extends Error {
     constructor(seconds) {
-        super(`The phone stopped answering for ${seconds} seconds.`);
+        super(`The phone stopped answering for ${seconds} seconds. ${RESTART}`);
         this.name = "StallError";
     }
 }
@@ -35,24 +40,47 @@ export class SuperStopped extends Error {
 export class Flow {
     #device;
     #ui;
-    #stallMs;
+    #seconds;
     #transfers = new WeakMap();
     #superParts = 0;
+    // The USB device whose bootloader stopped answering. The installer never
+    // closes it: a reply cut short leaves the bootloader unable to answer.
+    #dead = null;
     // Set after super stopped part way, until the fastbootd steps finish.
     resume = false;
 
-    constructor(device, ui, stallMs = STALL_SECONDS * 1000) {
+    constructor(device, ui, seconds = SECONDS) {
         this.#device = device;
         this.#ui = ui;
-        this.#stallMs = stallMs;
+        this.#seconds = seconds;
         const run = device.runCommand.bind(device);
         device.runCommand = async (text) => {
+            if (this.#isDead()) {
+                throw new PhoneError(DEAD);
+            }
             const reply = await run(text);
             if (text === "flash:super") {
                 this.#superParts++;
             }
             return reply;
         };
+        // fastboot.js gives up on a getvar after 10 seconds but leaves its read
+        // pending, and that read then takes the reply to the next command.
+        device.getVariable = async (name) => {
+            try {
+                const reply = (await device.runCommand(`getvar:${name}`)).text.trim();
+                return reply === "" ? null : reply;
+            } catch (error) {
+                if (error.name === "FastbootError" && error.status === "FAIL") {
+                    return null;
+                }
+                throw error;
+            }
+        };
+    }
+
+    #isDead() {
+        return this.#device.device != null && this.#device.device === this.#dead;
     }
 
     // Counts the transfers in flight on the current USB device, which changes
@@ -77,30 +105,30 @@ export class Flow {
         }
     }
 
-    async #call(action) {
+    async #call(action, seconds = this.#seconds.command) {
+        if (this.#isDead()) {
+            throw new PhoneError(DEAD);
+        }
         this.#watch();
         const usb = this.#device.device;
         const state = this.#transfers.get(usb) ?? { pending: 0 };
         const work = action();
-        // A stalled transfer only settles once the device is closed.
+        // A stalled transfer settles when the phone restarts.
         work.catch(() => {});
+        const limit = seconds * 1000;
         let timer;
         const stalled = new Promise((_, reject) => {
             timer = setInterval(() => {
                 const waited = state.pending > 0 ? Date.now() - state.since : 0;
                 this.#ui.waiting(waited >= 10000 ? Math.floor(waited / 1000) : null);
-                if (waited > this.#stallMs) {
-                    reject(new StallError(Math.round(this.#stallMs / 1000)));
+                if (waited > limit) {
+                    this.#dead = usb;
+                    reject(new StallError(seconds));
                 }
-            }, Math.min(1000, this.#stallMs / 4));
+            }, Math.min(1000, limit / 4));
         });
         try {
             return await Promise.race([work, stalled]);
-        } catch (error) {
-            if (error instanceof StallError) {
-                usb?.close().catch(() => {});
-            }
-            throw error;
         } finally {
             clearInterval(timer);
             this.#ui.waiting(null);
@@ -160,7 +188,7 @@ export class Flow {
             const size = parseInt(await this.getvar(`partition-size:${partition}`) ?? "", 16);
             image = await withAvbFooter(file, size);
         }
-        await this.#call(() => this.#device.flashBlob(partition, image, onProgress));
+        await this.#call(() => this.#device.flashBlob(partition, image, onProgress), this.#seconds.flash);
     }
 
     async #run(pkg, steps, inBootloader) {
@@ -248,8 +276,7 @@ export class Flow {
     async #lockCommand(text) {
         this.#ui.log(`fastboot ${text}`);
         try {
-            // Not timed: the bootloader may wait for the user's choice on the phone.
-            await this.#device.runCommand(text);
+            await this.#call(() => this.#device.runCommand(text), this.#seconds.confirm);
         } catch (error) {
             if (error.name === "FastbootError" && error.status === "FAIL") {
                 throw new PhoneError(`The bootloader refused: ${error.bootloaderMessage.trim()}`);
