@@ -3,7 +3,7 @@
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
 import { Flow, SuperStopped } from "./flow.js";
 import { hashFiles } from "./hash.js";
-import { lockAllowed, readPackage, writesFirmware } from "./package.js";
+import { customKey, lockAllowed, readPackage, writesFirmware } from "./package.js";
 
 const Buttons = {
     CONNECT: "connect",
@@ -62,6 +62,8 @@ function setButtonState({ id, enabled }) {
 let busy = false;
 let pkg = null;
 let setStatus = () => {};
+// The status line of the running action, where "Connect again" appears.
+let statusLine = null;
 let lastProgress = ["", undefined];
 let waitingNote = "";
 
@@ -71,25 +73,42 @@ function showProgress() {
 
 const device = new fastboot.FastbootDevice();
 
-// Waits for the phone to leave after a restart, then for it to come back. A
-// phone in fastbootd is a new USB device to the browser, so it may need a click.
-async function reconnect(message) {
+// Waits for the phone to leave after a restart, then for it to come back.
+// Resolves to false if it did not leave in time and to null if it did not come
+// back in time. After a restart the phone is a new USB device to the browser,
+// so it may need a click.
+async function reconnect(message, seconds = 30, back = Infinity) {
     const button = document.getElementById("reconnect-button");
-    const left = (async () => {
-        const deadline = Date.now() + 30000;
-        while (device.isConnected && Date.now() < deadline) {
+    const before = device.device;
+    let left = false;
+    const onDisconnect = (event) => {
+        left ||= event.device === before;
+    };
+    navigator.usb.addEventListener("disconnect", onDisconnect);
+    setStatus(message);
+    try {
+        const deadline = Date.now() + seconds * 1000;
+        while (!left && device.isConnected && Date.now() < deadline) {
             await sleep(250);
         }
-    })();
-    await Promise.race([device.waitForDisconnect(), left]);
+    } finally {
+        navigator.usb.removeEventListener("disconnect", onDisconnect);
+    }
+    if (!left && device.isConnected) {
+        return false;
+    }
     setStatus(`${message} When it shows its screen, press Connect again if the installer does not continue.`);
+    statusLine?.after(button);
     button.hidden = false;
+    const deadline = Date.now() + back * 1000;
+    let poll;
     try {
-        await new Promise((resolve) => {
-            const poll = setInterval(() => {
-                if (device.isConnected) {
-                    clearInterval(poll);
-                    resolve();
+        const returned = await new Promise((resolve) => {
+            poll = setInterval(() => {
+                if (device.isConnected && (left || device.device !== before)) {
+                    resolve(true);
+                } else if (Date.now() > deadline) {
+                    resolve(false);
                 }
             }, 250);
             button.onclick = async () => {
@@ -100,11 +119,16 @@ async function reconnect(message) {
                 }
             };
         });
+        if (!returned) {
+            return null;
+        }
     } finally {
+        clearInterval(poll);
         button.hidden = true;
         button.onclick = null;
     }
     log("Connected again");
+    return true;
 }
 
 const flow = new Flow(device, {
@@ -159,6 +183,12 @@ async function unlockCritical() {
     return await flow.unlock(true);
 }
 
+function installed(state) {
+    return state === null
+        ? "Installed. The phone restarts into DiamaneOS."
+        : "Installed. The phone waits in Fastboot Mode. Do not start Android: lock the bootloader below first.";
+}
+
 async function install() {
     if (pkg === null) {
         throw new Error("Choose an image set first.");
@@ -166,7 +196,7 @@ async function install() {
     document.getElementById("fallback").hidden = true;
     await requestWakeLock();
     try {
-        await flow.install(pkg);
+        return installed(await flow.install(pkg));
     } catch (error) {
         if (error instanceof SuperStopped) {
             document.getElementById("fallback").hidden = false;
@@ -175,25 +205,34 @@ async function install() {
     } finally {
         await releaseWakeLock();
     }
-    return "Installed. The phone restarts into DiamaneOS.";
 }
 
 async function fallback() {
     await requestWakeLock();
+    let state;
     try {
-        await flow.fallback(pkg);
+        state = await flow.fallback(pkg);
     } finally {
         await releaseWakeLock();
     }
     document.getElementById("fallback").hidden = true;
-    return "Installed. The phone restarts into DiamaneOS.";
+    return installed(state);
 }
 
 async function lock() {
-    if (pkg === null) {
-        throw new Error("Choose the image set that is installed first.");
+    let state;
+    await requestWakeLock();
+    try {
+        state = await flow.lock(pkg);
+    } finally {
+        await releaseWakeLock();
     }
-    return await flow.lock(pkg.record);
+    if (state === null) {
+        return "The phone did not return to Fastboot Mode. A yellow warning screen at its start shows that the "
+            + "bootloader is locked. An orange one means it is still unlocked.";
+    }
+    return "The bootloader is locked. Choose Start on the phone with the volume and power buttons. Each start "
+        + "shows a yellow warning screen with the ID of the key the OS is signed with. This is expected.";
 }
 
 function recoveryLink(statusField) {
@@ -226,6 +265,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
     button.onclick = async () => {
         busy = true;
         setStatus = statusCallback;
+        statusLine = statusContainer ?? statusField.parentElement;
         lastProgress = ["", undefined];
         waitingNote = "";
         refresh();
@@ -267,7 +307,8 @@ function refresh() {
     setButtonState({ id: Buttons.UNLOCK_CRITICAL, enabled: usb && !busy });
     setButtonState({ id: Buttons.INSTALL, enabled: usb && !busy && confirmed });
     setButtonState({ id: Buttons.FALLBACK, enabled: usb && !busy && record !== undefined && flow.resume });
-    setButtonState({ id: Buttons.LOCK, enabled: usb && !busy && record !== undefined && lockAllowed(record) });
+    setButtonState({ id: Buttons.LOCK, enabled: usb && !busy && record !== undefined && lockAllowed(record)
+        && flow.lockReady(pkg) });
     for (const id of ["folder-input", "files-input"]) {
         document.getElementById(id).disabled = busy;
     }
@@ -282,9 +323,14 @@ function showPackage(record) {
     ].join(" ").trim();
     document.getElementById("firmware-release").textContent = firmware ?? "the one in the image set";
     document.getElementById("firmware-check").hidden = firmware === null;
-    document.getElementById("lock-notice").textContent = lockAllowed(record)
-        ? "This image set may be installed on a locked phone."
-        : record.notice ?? "This image set must stay on an unlocked phone.";
+    let notice = record.notice ?? "This image set must stay on an unlocked phone.";
+    if (lockAllowed(record)) {
+        notice = "This image set installs its signing key, and the bootloader can be locked straight after the "
+            + "install.";
+    } else if (record.never_lock === false && customKey(record) === null) {
+        notice = "This image set installs no signing key, so the installer cannot lock it.";
+    }
+    document.getElementById("lock-notice").textContent = notice;
 }
 
 async function choosePackage(list) {
@@ -338,10 +384,19 @@ fastboot.setDebugLevel(1);
 if ("usb" in navigator) {
     addButtonHook(Buttons.CONNECT, connect);
     addButtonHook(Buttons.UNLOCK, unlock);
-    addButtonHook(Buttons.UNLOCK_CRITICAL, unlockCritical);
+    addButtonHook(Buttons.UNLOCK_CRITICAL, unlockCritical, { recovery: true });
     addButtonHook(Buttons.INSTALL, install, { recovery: true });
     addButtonHook(Buttons.FALLBACK, fallback, { recovery: true });
-    addButtonHook(Buttons.LOCK, lock);
+    addButtonHook(Buttons.LOCK, lock, { recovery: true });
+    // The lock is offered only while the phone stays connected after the install.
+    navigator.usb.addEventListener("connect", refresh);
+    navigator.usb.addEventListener("disconnect", (event) => {
+        if (flow.lost(event.device)) {
+            document.getElementById("lock-status").textContent = "The phone restarted after the install. Install "
+                + "again, then lock straight after.";
+        }
+        refresh();
+    });
     for (const id of ["folder-input", "files-input"]) {
         const input = document.getElementById(id);
         input.addEventListener("change", () => choosePackage(input.files));

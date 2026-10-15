@@ -88,6 +88,29 @@
                 </ul>
             </section>
 
+            <section id="unlock-refused">
+                <h2><a href="#unlock-refused">Unlocking is not allowed</a></h2>
+
+                <ul>
+                    <li>The phone allows unlocking only while OEM unlocking is on in Developer options.</li>
+                    <li>When Android starts after the first unlock, it turns OEM unlocking off and greys the
+                    switch out. The critical partitions can then not be unlocked.</li>
+                    <li>Ask for help in that case, and do not lock the phone.</li>
+                </ul>
+            </section>
+
+            <section id="lock-failed">
+                <h2><a href="#lock-failed">Locking failed or was not confirmed</a></h2>
+
+                <ul>
+                    <li>If the bootloader is still unlocked, the phone works unlocked. To lock it, install
+                    again and lock straight after.</li>
+                    <li>If the bootloader refused the lock, do not repeat it. Ask for help.</li>
+                    <li>Never lock a phone that does not allow unlocking. If it then failed to start, it could
+                    not be unlocked again.</li>
+                </ul>
+            </section>
+
             <section id="stock">
                 <h2><a href="#stock">Returning to the stock OS</a></h2>
 

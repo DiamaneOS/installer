@@ -1,0 +1,78 @@
+{
+  "avb_custom_key": {
+    "file": "avb_pkmd.bin"
+  },
+  "build_id": "fixture",
+  "firmware": {
+    "images": {
+      "abl.elf": "f7a8842268ab2ea09df4686051e54e5fb344d8dc43401468b8f592588ec0486b",
+      "logfs_ufs_8mb.bin": "0309008480f250ac568d6ee4e6cc548ec1eaaf23eea2cd226e2192a21aa85a12",
+      "storsec.mbn": "02031c4934ac7f4003145deb7642e2b7a9b7642190d9fc43416199bdc85739e2"
+    },
+    "release": "FP6.QREL.16.111.0",
+    "reset": {
+      "modemst1": {
+        "file": "modemst1.img",
+        "sha256": "83cdc253b4414cf3ffc1360be2050b377ed5d68ed7b989add95deee3738ca0b1"
+      },
+      "modemst2": {
+        "file": "modemst2.img",
+        "sha256": "a3001585f4d96015ac376296b3e31abe07a3f2505e58266f2286aa8663970515"
+      }
+    },
+    "steps": [
+      {
+        "image": "abl.elf",
+        "partition": "abl_a"
+      },
+      {
+        "image": "abl.elf",
+        "partition": "abl_b"
+      },
+      {
+        "image": "logfs_ufs_8mb.bin",
+        "partition": "logfs",
+        "wipe_only": true
+      },
+      {
+        "image": "storsec.mbn",
+        "partition": "storsec"
+      }
+    ]
+  },
+  "flash": {
+    "bootloader": [
+      "boot",
+      "vbmeta"
+    ],
+    "logical": [
+      "system",
+      "vendor"
+    ],
+    "slot": "a"
+  },
+  "never_lock": false,
+  "product": "FP6",
+  "release": false,
+  "schema_version": 1,
+  "wipe": {
+    "images": {
+      "frp": {
+        "file": "frp.img",
+        "sha256": "a6daf5d544df9d52b482bd34dfa446de6aba20d04ac7e86cae21cbaf51c37dd3"
+      },
+      "metadata": {
+        "file": "metadata.img",
+        "sha256": "56db07c208c6e9c67f19ac16a3b5afd17019d6633ff451abf32209f5ca4a37de"
+      },
+      "misc": {
+        "file": "misc.img",
+        "sha256": "9c592c19862ec9111472e91af4e9d2bd381d83e67288745d22722358c8e76403"
+      },
+      "userdata": {
+        "file": "userdata.img",
+        "sha256": "731d45bbce4aec1a87aa113d2f33ef4d808b2665d5220c31ac2657b886c5be1c"
+      }
+    }
+  }
+}

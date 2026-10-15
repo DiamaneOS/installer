@@ -5,31 +5,42 @@ import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 import { Flow, PhoneError, StallError, SuperStopped } from "../js/flow.js";
-import { PackageError, SCRIPT, readPackage, scriptCommands, withAvbFooter } from "../js/package.js";
+import {
+    PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, scriptCommands, withAvbFooter,
+} from "../js/package.js";
 import { Sha256 } from "../js/sha256.js";
 
-const FIXTURE = new URL("./fixture/", import.meta.url);
+// What the tools' flash_all.commands() returns for each fixture (make-fixture.py).
+const COMMANDS = JSON.parse(readFileSync(new URL("./flash-all-commands.json", import.meta.url), "utf8"));
+const FIXTURES = ["fixture", "fixture-relock"];
 const FAST = { flash: 0.1, command: 0.1, confirm: 0.1 };
 
-function fixtureFiles(changes = {}) {
+function fixtureFiles(name, changes = {}) {
+    const directory = new URL(`./${name}/`, import.meta.url);
     const files = new Map();
-    for (const name of readdirSync(FIXTURE)) {
-        files.set(name, new Blob([changes[name] ?? readFileSync(new URL(name, FIXTURE))]));
+    for (const file of readdirSync(directory)) {
+        files.set(file, new Blob([changes[file] ?? readFileSync(new URL(file, directory))]));
     }
     return files;
 }
 
-async function fixturePackage() {
-    const files = fixtureFiles();
+async function fixturePackage(name) {
+    const files = fixtureFiles(name);
     return { ...(await readPackage(files)), files };
 }
 
-// Answers like an unlocked FP6 bootloader, or fastbootd after "reboot-fastboot".
+function expected(name) {
+    return COMMANDS[name].map((args) => `fastboot ${args.join(" ")}`);
+}
+
+// Answers like an FP6 bootloader, or fastbootd after "reboot-fastboot".
 // stall(text, device) returns true for the command the phone never answers.
 class FakeDevice {
     constructor(stall = () => false) {
         this.stall = stall;
         this.mode = "bootloader";
+        this.unlocked = "yes";
+        this.ability = 1;
         this.sent = [];
         // What flash-all.sh would show: flashes, slot changes and restarts.
         this.events = [];
@@ -39,6 +50,10 @@ class FakeDevice {
 
     // A new USB device, as after a restart.
     reconnected() {
+        if (this.locking) {
+            this.unlocked = "no";
+            this.locking = false;
+        }
         const usb = {
             transferOut: async () => ({ status: "ok" }),
             transferIn: () => (usb.stalled ? new Promise(() => {}) : Promise.resolve({})),
@@ -57,13 +72,15 @@ class FakeDevice {
         if (text.startsWith("set_active:")) {
             this.events.push(`fastboot --set-active=${text.slice("set_active:".length)}`);
         } else if (text.startsWith("reboot")) {
-            this.events.push(`fastboot ${text.replace("-", " ")}`);
+            this.events.push(`fastboot ${text}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
+        } else if (text === "flashing lock") {
+            this.locking = true;
         }
-        const values = { product: "FP6", unlocked: "yes", "is-userspace": this.mode === "fastbootd" ? "yes" : "no" };
+        const values = { product: "FP6", unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no" };
         const replies = {
-            "oem device-info": "Device unlocked: true\nDevice critical unlocked: true\n",
-            "flashing get_unlock_ability": "get_unlock_ability: 1\n",
+            "oem device-info": `Device unlocked: ${this.unlocked === "yes"}\nDevice critical unlocked: true\n`,
+            "flashing get_unlock_ability": `get_unlock_ability: ${this.ability}\n`,
         };
         return { text: (text.startsWith("getvar:") ? values[text.slice("getvar:".length)] : replies[text]) ?? "" };
     }
@@ -78,7 +95,12 @@ class FakeDevice {
     }
 }
 
-const ui = { connect: async () => {}, reconnect: async () => {}, progress() {}, waiting() {}, log() {} };
+const ui = { connect: async () => {}, reconnect: async () => true, progress() {}, waiting() {}, log() {} };
+
+// The fake phone restarts whenever the installer waits for a restart.
+function restarting(fake) {
+    return { ...ui, reconnect: async () => (fake.reconnected(), true) };
+}
 
 // The fake phone's events, written as flash-all.sh would write them.
 function asScript(events, pkg) {
@@ -86,63 +108,70 @@ function asScript(events, pkg) {
     return events.map((event) => (Array.isArray(event) ? `fastboot flash ${event[0]} ${names.get(event[1])}` : event));
 }
 
-test("the install steps are those of the tools' flash-all.sh", async () => {
-    const pkg = await fixturePackage();
-    const script = scriptCommands(await pkg.files.get(SCRIPT).text());
-    const fake = new FakeDevice();
-    await new Flow(fake, ui).install(pkg);
-    assert.deepEqual(asScript(fake.events, pkg), script);
-    // The phone is checked before the first write, as flash-all.sh does.
-    assert.deepEqual(fake.sent.slice(0, 4),
-        ["getvar:product", "getvar:is-userspace", "getvar:unlocked", "oem device-info"]);
+test("the install steps are those of the tools' flash_all.py and flash-all.sh", async () => {
+    for (const name of FIXTURES) {
+        const pkg = await fixturePackage(name);
+        assert.deepEqual(pkg.steps.map(command), expected(name), name);
+        assert.deepEqual(scriptCommands(await pkg.files.get(SCRIPT).text()), expected(name), name);
+        const fake = new FakeDevice();
+        await new Flow(fake, restarting(fake)).install(pkg);
+        assert.deepEqual(asScript(fake.events, pkg), expected(name), name);
+        // The phone is checked before the first write, as flash-all.sh does.
+        assert.deepEqual(fake.sent.slice(0, 4),
+            ["getvar:product", "getvar:is-userspace", "getvar:unlocked", "oem device-info"]);
+    }
+    // A set that must never be locked gets no key and starts Android, even if it names one.
+    const record = (await fixturePackage("fixture-relock")).record;
+    const never = installSteps({ ...record, never_lock: true }).map(command);
+    assert.deepEqual(never, expected("fixture"));
+    assert.ok(!never.some((line) => line.includes("avb_custom_key") || line.includes("flashing")));
+    assert.equal(lockAllowed({ ...record, never_lock: true }), false);
 });
 
 test("a set whose files or flash-all.sh disagree is refused", async () => {
-    const script = readFileSync(new URL(SCRIPT, FIXTURE), "utf8");
-    const record = JSON.parse(readFileSync(new URL("build.json", FIXTURE), "utf8"));
+    const script = readFileSync(new URL(`./fixture/${SCRIPT}`, import.meta.url), "utf8");
+    const record = JSON.parse(readFileSync(new URL("./fixture/build.json", import.meta.url), "utf8"));
     const cases = {
-        "lists other steps": { [SCRIPT]: script.replace("fastboot reboot\n", "fastboot erase userdata\nfastboot reboot\n") },
-        "for the FP5": { "build.json": JSON.stringify({ ...record, product: "FP5" }) },
-        "malformed": { SHA256SUMS: "not a sum\n" },
+        "lists other steps": ["fixture", { [SCRIPT]: script.replace("fastboot reboot\n", "fastboot erase userdata\nfastboot reboot\n") }],
+        "for the FP5": ["fixture", { "build.json": JSON.stringify({ ...record, product: "FP5" }) }],
+        "malformed": ["fixture", { SHA256SUMS: "not a sum\n" }],
+        "not the key that signs vbmeta.img": ["fixture-relock", { "avb_pkmd.bin": "another key\n" }],
     };
-    for (const [message, changes] of Object.entries(cases)) {
-        await assert.rejects(readPackage(fixtureFiles(changes)), (error) =>
+    for (const [message, [name, changes]] of Object.entries(cases)) {
+        await assert.rejects(readPackage(fixtureFiles(name, changes)), (error) =>
             error instanceof PackageError && error.message.includes(message));
     }
-    const files = fixtureFiles();
+    const files = fixtureFiles("fixture");
     files.delete("vendor.img");
     await assert.rejects(readPackage(files), /vendor.img is missing/);
 });
 
 test("a stall after the first part of super is finished through fastbootd", async () => {
-    const pkg = await fixturePackage();
-    const stallOnce = (text, fake) => text === "download:1" && !fake.stalledBefore && (fake.stalledBefore = true);
-    const fake = new FakeDevice(stallOnce);
-    const flow = new Flow(fake, { ...ui, reconnect: async () => fake.reconnected() }, FAST);
-    await assert.rejects(flow.install(pkg), SuperStopped);
-    assert.equal(flow.resume, true);
-    const before = fake.events.length;
-    fake.reconnected();
-    await flow.fallback(pkg);
-    const fallback = asScript(fake.events.slice(before), pkg);
-    // As flash-steps prints it for a stalled super.
-    assert.deepEqual(fallback, [
-        "fastboot reboot fastboot",
-        "fastboot flash system_a system.img",
-        "fastboot flash vendor_a vendor.img",
-        "fastboot reboot bootloader",
-        "fastboot flash frp frp.img",
-        "fastboot flash metadata metadata.img",
-        "fastboot flash misc misc.img",
-        "fastboot flash userdata userdata.img",
-        "fastboot --set-active=a",
-        "fastboot reboot",
-    ]);
-    assert.equal(flow.resume, false);
+    for (const name of FIXTURES) {
+        const pkg = await fixturePackage(name);
+        const stallOnce = (text, fake) => text === "download:1" && !fake.stalledBefore && (fake.stalledBefore = true);
+        const fake = new FakeDevice(stallOnce);
+        const flow = new Flow(fake, restarting(fake), FAST);
+        await assert.rejects(flow.install(pkg), SuperStopped);
+        assert.equal(flow.resume, true);
+        const before = fake.events.length;
+        fake.reconnected();
+        await flow.fallback(pkg);
+        // The steps flash-steps prints for a stalled super, then the rest of flash-all.sh.
+        const all = expected(name);
+        assert.deepEqual(asScript(fake.events.slice(before), pkg), [
+            "fastboot reboot-fastboot",
+            "fastboot flash system_a system.img",
+            "fastboot flash vendor_a vendor.img",
+            "fastboot reboot-bootloader",
+            ...all.slice(all.indexOf("fastboot flash super super.img") + 1),
+        ], name);
+        assert.equal(flow.resume, false);
+    }
 });
 
 test("a stall anywhere else stops the install, without cutting the reply short", async () => {
-    const pkg = await fixturePackage();
+    const pkg = await fixturePackage("fixture");
     const fake = new FakeDevice((text) => text === "flash:boot_a");
     const flow = new Flow(fake, ui, FAST);
     await assert.rejects(flow.install(pkg), StallError);
@@ -156,14 +185,57 @@ test("a stall anywhere else stops the install, without cutting the reply short",
     assert.equal((await flow.state()).product, "FP6");
 });
 
-test("locking needs a set that allows it and a phone that can be unlocked again", async () => {
-    const record = JSON.parse(readFileSync(new URL("build.json", FIXTURE), "utf8"));
-    const fake = new FakeDevice();
-    const flow = new Flow(fake, ui);
-    await assert.rejects(flow.lock(record), PhoneError);
-    assert.equal(fake.sent.length, 0);
-    await flow.lock({ ...record, never_lock: false, signing: "release-keys" });
-    assert.equal(fake.sent.at(-1), "flashing lock_critical");
+test("the bootloader is locked only straight after installing a set with a key, never critical", async () => {
+    const plain = await fixturePackage("fixture");
+    let fake = new FakeDevice();
+    let flow = new Flow(fake, restarting(fake));
+    await flow.install(plain);
+    let sent = fake.sent.length;
+    await assert.rejects(flow.lock(plain), PhoneError);
+    assert.equal(fake.sent.length, sent);
+
+    const pkg = await fixturePackage("fixture-relock");
+    const refused = {
+        "not installed": async () => {},
+        "restarted after the install": async (flow, fake) => {
+            await flow.install(pkg);
+            fake.reconnected();
+        },
+        "disconnected after the install": async (flow, fake) => {
+            await flow.install(pkg);
+            flow.lost(fake.device);
+        },
+        "unlocking not allowed": async (flow, fake) => {
+            await flow.install(pkg);
+            fake.ability = 0;
+        },
+    };
+    for (const [why, setup] of Object.entries(refused)) {
+        const fake = new FakeDevice();
+        const flow = new Flow(fake, restarting(fake));
+        await setup(flow, fake);
+        await assert.rejects(flow.lock(pkg), PhoneError, why);
+        assert.ok(!fake.sent.some((text) => text.startsWith("flashing lock")), why);
+    }
+
+    fake = new FakeDevice();
+    flow = new Flow(fake, restarting(fake));
+    await flow.install(pkg);
+    sent = fake.sent.length;
+    assert.equal((await flow.lock(pkg)).unlocked, "no");
+    // Still unlocked and unlocking allowed, right before the lock.
+    assert.deepEqual(fake.sent.slice(sent, sent + 6), ["getvar:product", "getvar:is-userspace", "getvar:unlocked",
+        "oem device-info", "flashing get_unlock_ability", "flashing lock"]);
+    assert.ok(!fake.sent.includes("flashing lock_critical"));
+    await assert.rejects(flow.lock(pkg), PhoneError);
+
+    // The phone may start Android after the lock instead of returning to the bootloader.
+    fake = new FakeDevice();
+    const started = { ...restarting(fake), reconnect: async (message, seconds, back) => (back ? null : (fake.reconnected(), true)) };
+    flow = new Flow(fake, started);
+    await flow.install(pkg);
+    assert.equal(await flow.lock(pkg), null);
+    assert.ok(fake.locking);
 });
 
 test("SHA-256 matches across chunk boundaries", () => {

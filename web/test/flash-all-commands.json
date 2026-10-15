@@ -1,0 +1,38 @@
+{
+  "tools": "7abda9030fc6b2bb51357e7859c2b28067f92374",
+  "fixture": [
+    ["flash", "abl_a", "abl.elf"],
+    ["flash", "abl_b", "abl.elf"],
+    ["flash", "logfs", "logfs_ufs_8mb.bin"],
+    ["flash", "storsec", "storsec.mbn"],
+    ["flash", "modemst1", "modemst1.img"],
+    ["flash", "modemst2", "modemst2.img"],
+    ["flash", "boot_a", "boot.img"],
+    ["flash", "vbmeta_a", "vbmeta.img"],
+    ["flash", "super", "super.img"],
+    ["flash", "frp", "frp.img"],
+    ["flash", "metadata", "metadata.img"],
+    ["flash", "misc", "misc.img"],
+    ["flash", "userdata", "userdata.img"],
+    ["--set-active=a"],
+    ["reboot"]
+  ],
+  "fixture-relock": [
+    ["flash", "abl_a", "abl.elf"],
+    ["flash", "abl_b", "abl.elf"],
+    ["flash", "logfs", "logfs_ufs_8mb.bin"],
+    ["flash", "storsec", "storsec.mbn"],
+    ["flash", "modemst1", "modemst1.img"],
+    ["flash", "modemst2", "modemst2.img"],
+    ["flash", "boot_a", "boot.img"],
+    ["flash", "vbmeta_a", "vbmeta.img"],
+    ["flash", "super", "super.img"],
+    ["flash", "frp", "frp.img"],
+    ["flash", "metadata", "metadata.img"],
+    ["flash", "misc", "misc.img"],
+    ["flash", "userdata", "userdata.img"],
+    ["flash", "avb_custom_key", "avb_pkmd.bin"],
+    ["--set-active=a"],
+    ["reboot-bootloader"]
+  ]
+}
