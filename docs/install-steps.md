@@ -13,7 +13,9 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
    and vbmeta.
 4. `super`, when `flash.logical` is not empty.
 5. `wipe.images` in key order: frp, metadata, misc and userdata.
-6. `--set-active=a`, then `reboot`.
+6. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
+   `--set-active=a`, then `reboot-bootloader`. The phone waits in the bootloader for the lock.
+7. Otherwise `--set-active=a`, then `reboot`. A set with `never_lock: true` never gets a key.
 
 ## Checks before the first write
 
@@ -26,6 +28,7 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 | Files | `sha256sum -c SHA256SUMS`, every file | every file it uses |
 | No newer Fairphone release on the phone | a warning in the output | a box to tick |
 | Its own steps | none | the same as the set's `flash-all.sh` |
+| The key signs `vbmeta.img` | none | refuses the set otherwise |
 
 ## When super stalls
 
@@ -53,11 +56,14 @@ fastboot reboot
 - The logical partitions are the set's `flash.logical`, in that order.
 - Every one is written, because the stalled flash may already have written the new layout.
 - The web installer offers them only when the bootloader had taken at least one part of `super`.
+- `flash-steps` prints them only for sets signed with public test keys. For a set with a key, the
+  web installer ends as `flash-all.sh` does: the key, the slot and `reboot-bootloader`.
 
 ## Differences that remain
 
-- **Unlocking and locking:** `flash-all.sh` never unlocks or locks. The web installer has buttons for
-  both, with the checks in [web installer](web-installer.md#unlocking-and-locking).
+- **Unlocking and locking:** `flash-all.sh` never unlocks or locks. It prints the lock command for
+  a set with a key. The web installer has buttons for both, with the checks in
+  [web installer](web-installer.md#locking). Neither ever locks the critical partitions.
 - **Files:** the web installer needs only the files it uses, not `target-files.zip` or `otatools.zip`.
 - **fastboot:** the web installer uses fastboot.js. It turns a raw image larger than one part into a
   sparse one without skipping empty blocks, so such an image sends more data than with

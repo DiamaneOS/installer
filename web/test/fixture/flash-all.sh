@@ -8,11 +8,12 @@ cd "$(dirname "$0")"
 
 fail() { echo "$1" >&2; exit 1; }
 command -v fastboot >/dev/null 2>&1 || fail "fastboot is not installed (Android platform-tools)."
-value() { fastboot getvar "$1" 2>&1 | sed -n -e "s/^(bootloader) *//" -e "s/^$1: *//p" | head -n 1; }
+value() { reply=$(fastboot getvar "$1" 2>&1) || true; printf "%s\n" "$reply" | sed -n -e "s/^(bootloader) *//" -e "s/^$1: *//p" | head -n 1; }
 [ "$(value product)" = "FP6" ] || fail 'This image set is for the FP6: connect that phone in fastboot mode.'
 [ "$(value is-userspace)" = "no" ] || fail 'The phone is in fastbootd. Run "fastboot reboot bootloader" and start again.'
 [ "$(value unlocked)" = "yes" ] || fail 'The bootloader is locked. Unlock it as Fairphone describes, then start again.'
-fastboot oem device-info 2>&1 | grep -q "Device critical unlocked: true" || fail 'The critical partitions are locked, and the firmware is written to them. Run "fastboot flashing unlock_critical" as Fairphone describes (it erases the phone), then start again.'
+info=$(fastboot oem device-info 2>&1) || true
+printf "%s\n" "$info" | grep -q "Device critical unlocked: true" || fail 'The critical partitions are locked, and the firmware is written to them. Run "fastboot flashing unlock_critical" as Fairphone describes (it erases the phone), then start again.'
 if command -v sha256sum >/dev/null 2>&1; then sha256sum --quiet -c SHA256SUMS
 elif command -v shasum >/dev/null 2>&1; then shasum -a 256 --quiet -c SHA256SUMS
 else fail "Neither sha256sum nor shasum is installed, so the images cannot be checked."; fi

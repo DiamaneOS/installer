@@ -46,6 +46,7 @@
                     <li>At least 2 GB of free memory.</li>
                     <li>The image set, unpacked into a folder.</li>
                     <li>A good USB-C cable, plugged straight into the computer rather than into a hub.</li>
+                    <li>Only this phone connected to the computer over USB.</li>
                     <li>On Linux, the udev rules for Android devices: <code>android-sdk-platform-tools-common</code>
                     on Debian and Ubuntu, <code>android-udev</code> on Arch Linux.</li>
                     <li>On Linux, stop fwupd, which can take over the phone's USB connection:
@@ -86,8 +87,9 @@
                     press Power.</li>
                     <li>The phone erases itself and restarts. Hold Volume down while it restarts, so that it
                     returns to Fastboot Mode before Android starts.</li>
-                    <li>Press Unlock critical partitions and confirm on the phone the same way. Return to
-                    Fastboot Mode again.</li>
+                    <li>If Android starts, turn the phone off. Then hold Volume down while it starts.</li>
+                    <li>Press Connect, then Unlock critical partitions, and confirm on the phone the same way.
+                    Return to Fastboot Mode again.</li>
                 </ol>
 
                 <button id="unlock-button" disabled="">Unlock bootloader</button>
@@ -125,8 +127,11 @@
                 <h2><a href="#installing">Installing</a></h2>
 
                 <p>The install erases all data on the phone. It writes the firmware to both slots, then
-                DiamaneOS to slot a, then empty data partitions, and restarts the phone. Leave the phone
-                alone until it is finished.</p>
+                DiamaneOS to slot a, then empty data partitions. Leave the phone alone until it is
+                finished.</p>
+
+                <p>An image set that can be locked also installs its signing key, and the phone returns to
+                Fastboot Mode for the lock. Any other set restarts into DiamaneOS.</p>
 
                 <p id="firmware-check" hidden=""><label><input type="checkbox" id="firmware-confirm"/> The
                 phone does not run a newer Fairphone release than
@@ -168,16 +173,35 @@
 
                 <p id="lock-notice">Choose the image set first.</p>
 
+                <p>Locking turns on full verified boot with DiamaneOS's key. Lock right after the install,
+                before Android first starts.</p>
+
                 <ul>
-                    <li>The installer locks only with an image set that allows it. One signed with public
-                    test keys never does, because anyone can sign images with those keys.</li>
-                    <li>Locking erases all data. It locks the critical partitions first, then the bootloader,
-                    each confirmed on the phone.</li>
-                    <li>Do both in Fastboot Mode, one after the other, without starting Android in
-                    between.</li>
-                    <li>The installer locks only while the phone still allows unlocking, so that a phone that
-                    fails to start can be unlocked again.</li>
+                    <li><strong>Finish every lock step before starting Android.</strong> Android's setup turns
+                    OEM unlocking off, and the bootloader can then no longer be locked safely.</li>
+                    <li><strong>Stop if something fails.</strong> Do not repeat a lock command after an
+                    error.</li>
+                    <li>Locking erases all data on the phone.</li>
+                    <li>Each start then shows a yellow warning screen with the ID of the key the OS is signed
+                    with. This is expected: DiamaneOS boots with its own key, not Fairphone's.</li>
+                    <li>The installer locks only the bootloader, never the critical partitions.</li>
+                    <li>It never locks an image set that must stay unlocked, such as one signed with public
+                    test keys. Anyone can sign images with those keys.</li>
+                    <li>It locks only while the phone allows unlocking, so that a phone that fails to start
+                    can be unlocked again.</li>
                 </ul>
+
+                <ol>
+                    <li>Leave the phone in Fastboot Mode after the install. Do not start Android.</li>
+                    <li>Press Lock bootloader. The installer checks that the bootloader is still unlocked and
+                    that the phone allows unlocking.</li>
+                    <li>Confirm on the phone with the volume and power buttons. The phone erases all data and
+                    restarts.</li>
+                    <li>Hold Volume down while it restarts, so that it returns to Fastboot Mode. The installer
+                    then checks that the bootloader is locked. Choose Start on the phone.</li>
+                    <li>The last setup screen offers to turn OEM unlocking off, and that choice is selected.
+                    Keep it. Turn it on again only to unlock the bootloader.</li>
+                </ol>
 
                 <button id="lock-button" disabled="">Lock bootloader</button>
 

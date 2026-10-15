@@ -9,12 +9,14 @@ export const RECORD = "build.json";
 export const SUMS = "SHA256SUMS";
 export const SCRIPT = "flash-all.sh";
 
-// flash-all.sh checks the critical partitions with this line, which writes nothing.
+// Older flash-all.sh scripts check the critical partitions with this line, which writes nothing.
 const SCRIPT_CHECK = "fastboot oem device-info 2>&1 | grep -q ";
 const PARTITION = /^[A-Za-z0-9_-]{1,40}$/;
 const FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const SPARSE_MAGIC = 0xed26ff3a;
 const AVB_FOOTER_SIZE = 64;
+const VBMETA_MAGIC = 0x41564230;
+const VBMETA_HEADER_SIZE = 256;
 
 export class PackageError extends Error {
     constructor(message) {
@@ -54,11 +56,27 @@ export function command(step) {
     case "flash": return `fastboot flash ${step.partition} ${step.file}`;
     case "set-active": return `fastboot --set-active=${step.slot}`;
     case "reboot": return "fastboot reboot";
+    case "reboot-bootloader": return "fastboot reboot-bootloader";
     }
     throw new Error(`unknown step ${step.op}`);
 }
 
-// A clean install from the bootloader, in the order of flash_all.commands().
+// The AVB public key file the set installs, as flash_all.custom_key(): none for
+// a set that must never be locked.
+export function customKey(record) {
+    if (record.never_lock) {
+        return null;
+    }
+    return record.avb_custom_key?.file || null;
+}
+
+// Whether the installer may lock the bootloader after installing the set.
+export function lockAllowed(record) {
+    return record.never_lock === false && customKey(record) !== null;
+}
+
+// A clean install from the bootloader, in the order of flash_all.commands(). A
+// set with a key ends in the bootloader, so that it is locked before Android starts.
 export function installSteps(record) {
     const slot = record.flash.slot;
     const steps = [];
@@ -79,7 +97,12 @@ export function installSteps(record) {
     for (const [name, image] of Object.entries(record.wipe.images)) {
         steps.push(flash(name, image.file));
     }
-    steps.push({ op: "set-active", slot }, { op: "reboot" });
+    const key = customKey(record);
+    if (key !== null) {
+        steps.push(flash("avb_custom_key", key), { op: "set-active", slot }, { op: "reboot-bootloader" });
+    } else {
+        steps.push({ op: "set-active", slot }, { op: "reboot" });
+    }
     return steps;
 }
 
@@ -135,10 +158,35 @@ function checkRecord(record) {
     }
 }
 
-// Whether the set may stay on a locked phone. Sets signed with public test
-// keys never may: anyone can sign images with those keys.
-export function lockAllowed(record) {
-    return record.never_lock === false && record.signing !== "public-test-keys";
+// The public key that signs a vbmeta image (avb_vbmeta_image.h), in the format
+// of avb_pkmd.bin, or null.
+export async function vbmetaKey(blob) {
+    const header = new DataView(await blob.slice(0, VBMETA_HEADER_SIZE).arrayBuffer());
+    if (header.byteLength < VBMETA_HEADER_SIZE || header.getUint32(0) !== VBMETA_MAGIC) {
+        return null;
+    }
+    const start = VBMETA_HEADER_SIZE + Number(header.getBigUint64(12)) + Number(header.getBigUint64(64));
+    const size = Number(header.getBigUint64(72));
+    if (size === 0 || start + size > blob.size) {
+        return null;
+    }
+    return new Uint8Array(await blob.slice(start, start + size).arrayBuffer());
+}
+
+// A locked phone starts only what the installed key signs, so the key must sign
+// the set's own vbmeta.
+async function checkKey(record, files) {
+    const key = customKey(record);
+    if (key === null) {
+        return;
+    }
+    const signed = record.flash.bootloader.includes("vbmeta") && files.has("vbmeta.img")
+        ? await vbmetaKey(files.get("vbmeta.img")) : null;
+    const wanted = files.has(key) ? new Uint8Array(await files.get(key).arrayBuffer()) : null;
+    if (signed === null || wanted === null || signed.length !== wanted.length
+            || signed.some((byte, i) => byte !== wanted[i])) {
+        throw new PackageError(`${key} is not the key that signs vbmeta.img. A locked phone would not start.`);
+    }
 }
 
 // files: Map from file name to Blob. Reads and checks the set, hashes nothing.
@@ -178,6 +226,7 @@ export async function readPackage(files) {
             throw new PackageError(`${name} is missing from the chosen files.`);
         }
     }
+    await checkKey(record, files);
     return { record, sums, steps, fallback, needed: [...needed] };
 }
 

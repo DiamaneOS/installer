@@ -5,7 +5,8 @@ Installation and recovery tools and documentation for DiamaneOS.
 ## Contents
 
 - The [web installer](docs/web-installer.md) in `web/`: installs an image set from a Chromium-based
-  browser over USB, with a [page for failed installs](web/recovery.html).
+  browser over USB and locks the bootloader after it when the set allows that. It has a
+  [page for failed installs](web/recovery.html).
 - [Install steps](docs/install-steps.md): how the web installer and the image set's `flash-all.sh`
   match, and how to keep them in step.
 - The [Fairphone 6 stock recovery preflight](docs/recovery-preflight.md):
