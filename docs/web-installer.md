@@ -82,6 +82,7 @@ test, while DiamaneOS's flashed right after.
 | --- | --- |
 | `index.html`, `js/install.js` | The page and its script, from GrapheneOS's `web.html` and `web-install.js` |
 | `recovery.html` | What to do when an install or a lock fails |
+| `stock.html` | Returning to Fairphone's stock OS and locking it there |
 | `js/package.js` | Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the fastbootd fallback and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
@@ -119,6 +120,6 @@ No analytics, fonts or files from other hosts.
   and `static/js/fastboot/ffe7e270/fastboot.min.mjs` with its source map.
 - fastboot.js is GrapheneOS's fork at `ffe7e270061b95fe0f0f3abd1aa7d3c28999d1d9`.
 - The Pixel parts are gone: the release download, the factory zip flash and the custom AVB key
-  removal.
+  removal. The stock page lists the key removal as a command.
 - GrapheneOS's licence and notices are in [web/LICENSE](../web/LICENSE) and the fastboot.js
   [NOTICE](../web/js/fastboot/ffe7e270/NOTICE).

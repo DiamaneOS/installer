@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <title>Returning to the stock OS | DiamaneOS</title>
+        <link rel="stylesheet" href="style.css"/>
+        <meta name="description" content="How to replace DiamaneOS with Fairphone's stock OS and lock the bootloader on it."/>
+        <meta name="color-scheme" content="dark light"/>
+        <meta name="referrer" content="no-referrer"/>
+        <link rel="license" href="LICENSE"/>
+    </head>
+    <body>
+        <main id="stock">
+            <h1><a href="#stock">Returning to the stock OS</a></h1>
+
+            <p>This replaces DiamaneOS with Fairphone's stock OS on a Fairphone 6 and erases all data. It
+            uses <code>fastboot</code> from Google's
+            <a href="https://developer.android.com/tools/releases/platform-tools" rel="noreferrer">Android SDK
+            Platform-Tools</a>. Back to the <a href="index.html">web installer</a>.</p>
+
+            <ul>
+                <li>Run each command on its own and read its result before the next.</li>
+                <li>Let every command finish. The bootloader stops answering when a command is cut off while
+                the phone replies.</li>
+                <li>Finish every lock step before starting Android. Stop if something fails. Do not repeat a
+                lock command after an error.</li>
+            </ul>
+
+            <section id="image">
+                <h2><a href="#image">Getting the stock factory image</a></h2>
+
+                <ul>
+                    <li>Download Fairphone's factory image for your phone from Fairphone, as its
+                    <a href="https://support.fairphone.com/hc/en-us/articles/18896094650513-How-to-manually-install-Android-on-your-Fairphone" rel="noreferrer">manual
+                    install guide</a> describes.</li>
+                    <li>Check its SHA-256 against the checksum Fairphone publishes:
+                    <code>sha256sum FILE.zip</code>, or <code>shasum -a 256 FILE.zip</code> on macOS. Stop if
+                    the checksum differs.</li>
+                    <li>Use the Fairphone release whose firmware the DiamaneOS install wrote, or a newer one.
+                    Older firmware than the phone runs can leave it unable to start.</li>
+                </ul>
+            </section>
+
+            <section id="unlocking">
+                <h2><a href="#unlocking">Unlocking</a></h2>
+
+                <p>If the bootloader is locked:</p>
+
+                <ol>
+                    <li>In DiamaneOS, turn on developer options under Settings > About phone by tapping
+                    Build number seven times.</li>
+                    <li>Turn on OEM unlocking under Settings > System > Developer options.</li>
+                    <li>Turn the phone off. Hold Volume down while it starts, until it shows Fastboot Mode.</li>
+                    <li>Run <code>fastboot flashing unlock</code>, or press Unlock bootloader on the
+                    <a href="index.html#unlocking">installer page</a>. Confirm on the phone. This erases all
+                    data.</li>
+                    <li>Hold Volume down while it restarts, so that it returns to Fastboot Mode. If Android
+                    starts, turn the phone off and hold Volume down while it starts.</li>
+                </ol>
+
+                <p>The critical partitions are still unlocked from the install. <code>fastboot oem
+                device-info</code> must show <code>Device unlocked: true</code> and <code>Device critical
+                unlocked: true</code>.</p>
+            </section>
+
+            <section id="installing">
+                <h2><a href="#installing">Installing the stock OS</a></h2>
+
+                <ol>
+                    <li>In Fastboot Mode, with the bootloader unlocked, run <code>fastboot oem
+                    reset-rollback</code>. It clears the stored rollback indexes, so an older stock release
+                    can boot locked. The bootloader refuses it while locked.</li>
+                    <li>Unpack the factory image. Copy its flash script into the same folder, and in the copy
+                    change <code>REBOOT_TO_BOOTLOADER="false"</code> to
+                    <code>REBOOT_TO_BOOTLOADER="true"</code>. Change nothing else.</li>
+                    <li>Run the copy, as Fairphone's guide describes. The phone then stays in Fastboot Mode
+                    instead of starting Android.</li>
+                    <li>Do not start Android yet. Its first start on an unlocked phone turns OEM unlocking off,
+                    and the bootloader can then no longer be locked safely.</li>
+                </ol>
+
+                <p>The bootloader can stop while it writes Fairphone's <code>super.img</code>, with "Error
+                reading sparse file". Hold Power and Volume down until the phone restarts into Fastboot Mode.
+                Then switch to fastbootd with <code>fastboot reboot fastboot</code> and write the logical
+                partitions from <code>super.img</code> one by one.</p>
+            </section>
+
+            <section id="locking">
+                <h2><a href="#locking">Locking on the stock OS</a></h2>
+
+                <p>Lock only with the stock OS installed, and before Android starts.</p>
+
+                <ol>
+                    <li>Remove DiamaneOS's key, so the phone no longer trusts it: <code>fastboot erase
+                    avb_custom_key</code>.</li>
+                    <li>Check that <code>fastboot getvar current-slot</code> reports a, and that
+                    <code>fastboot oem device-info</code> shows both unlocks and <code>Verity mode:
+                    true</code>.</li>
+                    <li>Check that <code>fastboot flashing get_unlock_ability</code> reports 1. If it reports
+                    0, do not lock.</li>
+                    <li>Run <code>fastboot flashing lock_critical</code> and confirm on the phone. Hold Volume
+                    down while it restarts, so that it returns to Fastboot Mode without starting Android.</li>
+                    <li>Check again that <code>fastboot flashing get_unlock_ability</code> reports 1, and that
+                    <code>fastboot oem device-info</code> shows the critical partitions locked.</li>
+                    <li>Run <code>fastboot flashing lock</code> and confirm on the phone. This erases all
+                    data.</li>
+                    <li>Start the stock OS. It starts without a warning screen. Then turn off OEM unlocking
+                    under Settings > System > Developer options.</li>
+                </ol>
+
+                <p>This is Fairphone's order: the critical partitions first, then the bootloader. Never use
+                <code>fastboot flashing lock_critical</code> with DiamaneOS.</p>
+            </section>
+        </main>
+    </body>
+</html>
