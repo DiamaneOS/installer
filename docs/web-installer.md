@@ -29,16 +29,27 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 - It locks one domain per press, `lock_critical` first, then `lock`, and only while the phone
   reports unlock ability 1.
 
+## When the phone stops answering
+
+The FP6 bootloader stops answering when a reply to a command is cut off, and only a restart frees
+it.
+
+- The installer reads every reply to its end. fastboot.js gives up on a `getvar` after 10 seconds
+  and leaves its read pending, so the installer replaces that call with one that waits.
+- A USB transfer left unanswered for 60 seconds while flashing, 30 seconds for any other command or
+  5 minutes for an unlock or lock counts as a dead bootloader.
+- The installer then never closes the connection. It asks the user to hold Power and Volume down
+  until the phone restarts into Fastboot Mode, and sends nothing more until the phone is a new USB
+  device.
+
 ## When super stalls
 
-The bootloader can stop answering after it has taken the first part of `super`. Only a forced
-restart frees it, and the phone does not start until it is flashed again.
+The bootloader can stop answering after it has taken the first part of `super`, and the phone then
+does not start until it is flashed again. Fairphone's own super image once stopped this way in a
+test, while DiamaneOS's flashed right after.
 
-- A USB transfer that the phone leaves unanswered for 60 seconds counts as a stall. A part of super
-  takes about 20 seconds to send, with a transfer every few milliseconds.
-- If the bootloader had accepted at least one part, the installer closes the connection and offers
-  **Continue in fastbootd**. Any other stall or error stops the install and links to the recovery
-  page.
+- If the bootloader had accepted at least one part, the installer offers **Continue in fastbootd**.
+  Any other stall or error stops the install and links to the recovery page.
 - The user forces a restart into Fastboot Mode (Power and Volume down) and presses the button.
 - The installer runs `reboot-fastboot`, writes every logical partition to slot a in fastbootd,
   runs `reboot-bootloader`, then the steps that follow `super`.
@@ -52,7 +63,7 @@ restart frees it, and the phone does not start until it is flashed again.
 | `index.html`, `js/install.js` | The page and its script, from GrapheneOS's `web.html` and `web-install.js` |
 | `recovery.html` | What to do when an install fails |
 | `js/package.js` | Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
-| `js/flow.js` | The fastboot steps, the stall watchdog and the fastbootd fallback |
+| `js/flow.js` | The fastboot steps, the dead bootloader watchdog and the fastbootd fallback |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
 | `nginx/` | The security headers, and an example of where each set applies |

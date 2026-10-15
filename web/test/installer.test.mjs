@@ -9,6 +9,7 @@ import { PackageError, SCRIPT, readPackage, scriptCommands, withAvbFooter } from
 import { Sha256 } from "../js/sha256.js";
 
 const FIXTURE = new URL("./fixture/", import.meta.url);
+const FAST = { flash: 0.1, command: 0.1, confirm: 0.1 };
 
 function fixtureFiles(changes = {}) {
     const files = new Map();
@@ -36,16 +37,14 @@ class FakeDevice {
         this.reconnected();
     }
 
+    // A new USB device, as after a restart.
     reconnected() {
         const usb = {
             transferOut: async () => ({ status: "ok" }),
-            transferIn: () => new Promise((resolve, reject) => {
-                usb.pending = reject;
-                if (!usb.stalled) {
-                    resolve({});
-                }
-            }),
-            close: async () => usb.pending?.(new Error("closed")),
+            transferIn: () => (usb.stalled ? new Promise(() => {}) : Promise.resolve({})),
+            close: async () => {
+                usb.closed = true;
+            },
         };
         this.device = usb;
     }
@@ -61,17 +60,12 @@ class FakeDevice {
             this.events.push(`fastboot ${text.replace("-", " ")}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
         }
+        const values = { product: "FP6", unlocked: "yes", "is-userspace": this.mode === "fastbootd" ? "yes" : "no" };
         const replies = {
             "oem device-info": "Device unlocked: true\nDevice critical unlocked: true\n",
             "flashing get_unlock_ability": "get_unlock_ability: 1\n",
         };
-        return { text: replies[text] ?? "" };
-    }
-
-    async getVariable(name) {
-        await this.runCommand(`getvar:${name}`);
-        const values = { product: "FP6", unlocked: "yes", "is-userspace": this.mode === "fastbootd" ? "yes" : "no" };
-        return values[name] ?? null;
+        return { text: (text.startsWith("getvar:") ? values[text.slice("getvar:".length)] : replies[text]) ?? "" };
     }
 
     // As fastboot.js: an upload and a flash command per part, super in two parts.
@@ -124,7 +118,7 @@ test("a stall after the first part of super is finished through fastbootd", asyn
     const pkg = await fixturePackage();
     const stallOnce = (text, fake) => text === "download:1" && !fake.stalledBefore && (fake.stalledBefore = true);
     const fake = new FakeDevice(stallOnce);
-    const flow = new Flow(fake, { ...ui, reconnect: async () => fake.reconnected() }, 100);
+    const flow = new Flow(fake, { ...ui, reconnect: async () => fake.reconnected() }, FAST);
     await assert.rejects(flow.install(pkg), SuperStopped);
     assert.equal(flow.resume, true);
     const before = fake.events.length;
@@ -147,11 +141,19 @@ test("a stall after the first part of super is finished through fastbootd", asyn
     assert.equal(flow.resume, false);
 });
 
-test("a stall anywhere else only stops the install", async () => {
+test("a stall anywhere else stops the install, without cutting the reply short", async () => {
     const pkg = await fixturePackage();
-    const flow = new Flow(new FakeDevice((text) => text === "flash:boot_a"), ui, 100);
+    const fake = new FakeDevice((text) => text === "flash:boot_a");
+    const flow = new Flow(fake, ui, FAST);
     await assert.rejects(flow.install(pkg), StallError);
     assert.equal(flow.resume, false);
+    assert.notEqual(fake.device.closed, true);
+    // Nothing more reaches the phone until it restarts.
+    const sent = fake.sent.length;
+    await assert.rejects(flow.state(), PhoneError);
+    assert.equal(fake.sent.length, sent);
+    fake.reconnected();
+    assert.equal((await flow.state()).product, "FP6");
 });
 
 test("locking needs a set that allows it and a phone that can be unlocked again", async () => {
