@@ -88,7 +88,7 @@ test, while DiamaneOS's flashed right after.
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the fastbootd fallback and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
-| `nginx/` | The security headers, and an example of where each set applies |
+| `nginx/` | The security headers, and an example server for the installer's own host |
 | `serve.py` | A local server for tests, with the same headers |
 | `test/` | Node tests and two fixtures made with the tools' `flash_all.py` |
 
@@ -100,9 +100,9 @@ test, while DiamaneOS's flashed right after.
 - No `connect-src`: the installer makes no network requests.
 - `worker-src 'self'` instead of `child-src 'self'`, for the hash workers.
 - Trusted Types on the installer page too, with one policy that only creates the hash worker's URL.
-- HSTS as the website sends it: host-only, without preload.
+- HSTS as the website sends it: with subdomains, without preload.
 
-No analytics, fonts or files from other hosts.
+No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes the server.
 
 ## Testing locally
 
