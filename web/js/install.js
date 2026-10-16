@@ -3,8 +3,7 @@
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
 import { Flow } from "./flow.js";
 import { hashFiles } from "./hash.js";
-import { deviceName } from "./devices.js";
-import { customKey, lockAllowed, readPackage, writesFirmware } from "./package.js";
+import { customKey, deviceName, lockAllowed, readPackage, writesFirmware } from "./package.js";
 
 const Buttons = {
     CONNECT: "connect",

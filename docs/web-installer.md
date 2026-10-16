@@ -15,8 +15,8 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
   A phone locked with that key would not start.
 - Checks the phone before the first write, as `flash-all.sh` does: the set's product, the bootloader
   (not fastbootd), unlocked, and unlocked critical partitions when the set writes firmware.
-- Refuses a set for a product that `js/devices.js` does not list, and unlocks only a phone whose
-  product it lists. A new device is one entry there.
+- Refuses a set for a product that `DEVICES` in `js/package.js` does not list, and unlocks only a
+  phone whose product it lists. A new device is one entry there.
 - Asks the user to confirm that the phone does not run a newer stock release than the set's
   firmware. The bootloader cannot report it.
 - Copies an image's AVB footer to the end of a larger partition, as platform-tools `fastboot` does.
@@ -61,7 +61,7 @@ The bootloader stops answering when a reply to a command is cut off, and only a 
 - A USB transfer left unanswered for 60 seconds while flashing, 30 seconds for any other command or
   5 minutes for an unlock or lock counts as a dead bootloader.
 - The installer then never closes the connection. It asks the user to restart the phone into
-  Fastboot Mode with the buttons `js/devices.js` names for it, and sends nothing more until the phone
+  Fastboot Mode with the buttons `DEVICES` names for it, and sends nothing more until the phone
   is a new USB device.
 
 ## fastbootd
@@ -88,8 +88,7 @@ fastbootd instead.
 | `recovery.html` | What to do when an install or a lock fails |
 | `stock.html` | Returning to the device maker's stock OS and locking it there |
 | `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
-| `js/package.js` | Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
-| `js/devices.js` | The supported products, with each device's name and Fastboot Mode buttons for messages |
+| `js/package.js` | The supported devices (`DEVICES`). Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
