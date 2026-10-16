@@ -49,8 +49,7 @@ A set may be locked when `build.json` has `never_lock: false` and names a key in
    when locked, orange when still unlocked.
 
 The installer never sends `flashing lock_critical`, and never locks a set with `never_lock: true`.
-The gate is the record, not the name of the signing keys. A set signed with throwaway test keys
-and its own AVB key may be locked for tests.
+The gate is the record, not the name of the signing keys.
 
 ## When the phone stops answering
 
