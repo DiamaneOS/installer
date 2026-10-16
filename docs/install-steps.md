@@ -9,16 +9,19 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 
 1. `firmware.steps`: the Fairphone firmware, both slots of each A/B partition, in the stock order.
 2. `firmware.reset`: the empty modem file system images (`modemst1`, `modemst2`).
-3. `flash.bootloader` to slot a: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw, vbmeta_system
+3. When `flash.logical` is not empty: `snapshot-update cancel`, only if `getvar
+   snapshot-update-status` reports something other than `none`, as `fastboot flashall` and
+   fastboot.js do.
+4. `flash.bootloader` to slot a: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw, vbmeta_system
    and vbmeta.
-4. When `flash.logical` is not empty: `reboot fastboot`, then in fastbootd `wipe-super
+5. When `flash.logical` is not empty: `reboot fastboot`, then in fastbootd `wipe-super
    super_empty.img` and each logical partition to slot a, in that order, then `reboot-bootloader`.
-5. `wipe.images` in key order: frp, metadata, misc and userdata.
-6. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
+6. `wipe.images` in key order: frp, metadata, misc and userdata.
+7. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
    `--set-active=a`, then `reboot-bootloader`. The phone waits in the bootloader for the lock.
-7. Otherwise `--set-active=a`, then `reboot`. A set with `never_lock: true` never gets a key.
+8. Otherwise `--set-active=a`, then `reboot`. A set with `never_lock: true` never gets a key.
 
-Recovery, which holds fastbootd, is among the boot images in step 3. Nothing writes `super.img`
+Recovery, which holds fastbootd, is among the boot images in step 4. Nothing writes `super.img`
 from the bootloader, which can stall while it writes it.
 
 ## Checks before the first write

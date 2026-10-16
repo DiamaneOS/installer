@@ -24,6 +24,9 @@ fastboot flash logfs logfs_ufs_8mb.bin || exit /b 1
 fastboot flash storsec storsec.mbn || exit /b 1
 fastboot flash modemst1 modemst1.img || exit /b 1
 fastboot flash modemst2 modemst2.img || exit /b 1
+fastboot getvar snapshot-update-status 2>&1 | findstr /r /c:"snapshot-update-status: *[a-z]" | findstr /v /r /c:"snapshot-update-status: *none" >nul || goto no_snapshot
+fastboot snapshot-update cancel || exit /b 1
+:no_snapshot
 fastboot flash boot_a boot.img || exit /b 1
 fastboot flash vbmeta_a vbmeta.img || exit /b 1
 fastboot reboot fastboot || exit /b 1

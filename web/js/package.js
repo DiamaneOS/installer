@@ -55,6 +55,7 @@ function flash(partition, file) {
 export function command(step) {
     switch (step.op) {
     case "flash": return `fastboot flash ${step.partition} ${step.file}`;
+    case "cancel-snapshot": return "fastboot snapshot-update cancel";
     case "wipe-super": return `fastboot wipe-super ${step.file}`;
     case "set-active": return `fastboot --set-active=${step.slot}`;
     case "reboot": return "fastboot reboot";
@@ -80,8 +81,9 @@ export function lockAllowed(record) {
 
 // A clean install from the bootloader, in the order of flash_all.commands(). The
 // logical partitions are written in fastbootd on an empty super layout, the rest
-// in the bootloader. A set with a key ends in the bootloader, so that it is
-// locked before Android starts.
+// in the bootloader. Before the boot images an update the OS left pending is
+// cancelled, if the bootloader reports one. A set with a key ends in the
+// bootloader, so that it is locked before Android starts.
 export function installSteps(record) {
     const slot = record.flash.slot;
     const steps = [];
@@ -92,6 +94,9 @@ export function installSteps(record) {
         for (const [name, image] of Object.entries(record.firmware.reset)) {
             steps.push(flash(name, image.file));
         }
+    }
+    if (record.flash.logical.length > 0) {
+        steps.push({ op: "cancel-snapshot" });
     }
     for (const name of record.flash.bootloader) {
         steps.push(flash(`${name}_${slot}`, `${name}.img`));

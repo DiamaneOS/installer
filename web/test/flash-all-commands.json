@@ -1,5 +1,5 @@
 {
-  "tools": "89f712d20c41fc5a788d6edcd05ab483e70e1589",
+  "tools": "4cb5cc66a4bdbd8e89c46d277dfd09a1646a6f6d",
   "fixture": [
     ["flash", "abl_a", "abl.elf"],
     ["flash", "abl_b", "abl.elf"],
@@ -7,6 +7,7 @@
     ["flash", "storsec", "storsec.mbn"],
     ["flash", "modemst1", "modemst1.img"],
     ["flash", "modemst2", "modemst2.img"],
+    ["snapshot-update", "cancel"],
     ["flash", "boot_a", "boot.img"],
     ["flash", "vbmeta_a", "vbmeta.img"],
     ["reboot", "fastboot"],
@@ -28,6 +29,7 @@
     ["flash", "storsec", "storsec.mbn"],
     ["flash", "modemst1", "modemst1.img"],
     ["flash", "modemst2", "modemst2.img"],
+    ["snapshot-update", "cancel"],
     ["flash", "boot_a", "boot.img"],
     ["flash", "vbmeta_a", "vbmeta.img"],
     ["reboot", "fastboot"],
