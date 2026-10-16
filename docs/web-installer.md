@@ -8,7 +8,7 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 
 - Reads the image set from a local folder. It downloads nothing and sends nothing.
 - Checks each file it uses against the set's `SHA256SUMS` before the first write: every image the
-  install or the fastbootd fallback writes, `build.json` and `flash-all.sh`.
+  install writes, `build.json` and `flash-all.sh`.
 - Takes the steps from `build.json` as the tools do, and refuses a set whose `flash-all.sh` lists
   other `fastboot` commands.
 - Refuses a set whose AVB key (`avb_custom_key` in `build.json`) does not sign its own `vbmeta.img`.
@@ -63,19 +63,19 @@ it.
   until the phone restarts into Fastboot Mode, and sends nothing more until the phone is a new USB
   device.
 
-## When super stalls
+## fastbootd
 
-The bootloader can stop answering after it has taken the first part of `super`, and the phone then
-does not start until it is flashed again. Fairphone's own super image once stopped this way in a
-test, while DiamaneOS's flashed right after.
+The bootloader can stall while it writes `super.img`, so the logical partitions are written in
+fastbootd instead.
 
-- If the bootloader had accepted at least one part, the installer offers **Continue in fastbootd**.
-  Any other stall or error stops the install and links to the recovery page.
-- The user forces a restart into Fastboot Mode (Power and Volume down) and presses the button.
-- The installer runs `reboot-fastboot`, writes every logical partition to slot a in fastbootd,
-  runs `reboot-bootloader`, then the steps that follow `super`.
+- After the boot images the installer runs `reboot-fastboot`. Once the phone is back, it checks that
+  it is in fastbootd and is the same product.
+- It writes the empty layout from `super_empty.img`, then each logical partition to slot a.
+- It runs `reboot-bootloader` and checks the product, the bootloader and the unlock state again
+  before the data images.
 - fastbootd is a new USB device to the browser, so the user may have to choose the phone again.
-- The steps before `super` stay done. If the page was closed, the user runs the whole install again.
+- A stall or an error stops the install and links to the recovery page. The user runs the whole
+  install again.
 
 ## Files
 
@@ -85,7 +85,7 @@ test, while DiamaneOS's flashed right after.
 | `recovery.html` | What to do when an install or a lock fails |
 | `stock.html` | Returning to Fairphone's stock OS and locking it there |
 | `js/package.js` | Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
-| `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the fastbootd fallback and the lock |
+| `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
 | `nginx/` | The security headers, and an example server for the installer's own host |

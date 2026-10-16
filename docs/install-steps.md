@@ -11,11 +11,15 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 2. `firmware.reset`: the empty modem file system images (`modemst1`, `modemst2`).
 3. `flash.bootloader` to slot a: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw, vbmeta_system
    and vbmeta.
-4. `super`, when `flash.logical` is not empty.
+4. When `flash.logical` is not empty: `reboot fastboot`, then in fastbootd `wipe-super
+   super_empty.img` and each logical partition to slot a, in that order, then `reboot-bootloader`.
 5. `wipe.images` in key order: frp, metadata, misc and userdata.
 6. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
    `--set-active=a`, then `reboot-bootloader`. The phone waits in the bootloader for the lock.
 7. Otherwise `--set-active=a`, then `reboot`. A set with `never_lock: true` never gets a key.
+
+Recovery, which holds fastbootd, is among the boot images in step 3. Nothing writes `super.img`
+from the bootloader, which can stall while it writes it.
 
 ## Checks before the first write
 
@@ -30,34 +34,12 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 | Its own steps | none | the same as the set's `flash-all.sh` |
 | The key signs `vbmeta.img` | none | refuses the set otherwise |
 
-## When super stalls
+## Between the bootloader and fastbootd
 
-On a stall, `flash-all.sh` waits until the user stops it. `flash-steps` and the web installer give the same
-fastbootd steps, after a forced restart into Fastboot Mode (Power and Volume down):
-
-```sh
-fastboot reboot fastboot
-fastboot flash system_a system.img
-fastboot flash system_ext_a system_ext.img
-fastboot flash product_a product.img
-fastboot flash vendor_a vendor.img
-fastboot flash odm_a odm.img
-fastboot flash vendor_dlkm_a vendor_dlkm.img
-fastboot flash system_dlkm_a system_dlkm.img
-fastboot reboot bootloader
-fastboot flash frp frp.img
-fastboot flash metadata metadata.img
-fastboot flash misc misc.img
-fastboot flash userdata userdata.img
-fastboot --set-active=a
-fastboot reboot
-```
-
-- The logical partitions are the set's `flash.logical`, in that order.
-- Every one is written, because the stalled flash may already have written the new layout.
-- The web installer offers them only when the bootloader had taken at least one part of `super`.
-- `flash-steps` prints them only for sets signed with public test keys. For a set with a key, the
-  web installer ends as `flash-all.sh` does: the key, the slot and `reboot-bootloader`.
+- `flash-all.sh` waits until `getvar is-userspace` reports the new mode. It stops after 90 answers
+  from the old mode, two seconds apart.
+- The web installer waits for the phone to leave and come back, then checks the mode, the product
+  and, in the bootloader, the unlock state.
 
 ## Differences that remain
 
@@ -65,6 +47,9 @@ fastboot reboot
   a set with a key. The web installer has buttons for both, with the checks in
   [web installer](web-installer.md#locking). Neither ever locks the critical partitions.
 - **Files:** the web installer needs only the files it uses, not `target-files.zip` or `otatools.zip`.
+- **Empty super layout:** `fastboot wipe-super` writes the metadata of `super_empty.img` from the
+  computer. The web installer uploads the file and sends `update-super:super:wipe`, as `fastboot
+  flashall` does. Both leave an empty layout for the logical partitions.
 - **fastboot:** the web installer uses fastboot.js. It turns a raw image larger than one part into a
   sparse one without skipping empty blocks, so such an image sends more data than with
   platform-tools.
@@ -77,4 +62,3 @@ fastboot reboot
   steps. A missed change stops installs instead of changing them.
 - `web/test/fixture` is made with the tools' `flash_all.py`. Make it again after a change there (see
   [testing](web-installer.md#testing-locally)).
-- A change to the fastbootd steps in `flash_steps.py` needs the same change in `fallbackSteps`.

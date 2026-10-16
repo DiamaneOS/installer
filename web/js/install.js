@@ -1,7 +1,7 @@
 // @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&dn=expat.txt MIT
 
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
-import { Flow, SuperStopped } from "./flow.js";
+import { Flow } from "./flow.js";
 import { hashFiles } from "./hash.js";
 import { customKey, lockAllowed, readPackage, writesFirmware } from "./package.js";
 
@@ -10,7 +10,6 @@ const Buttons = {
     UNLOCK: "unlock",
     UNLOCK_CRITICAL: "unlock-critical",
     INSTALL: "install",
-    FALLBACK: "fallback",
     LOCK: "lock",
 };
 
@@ -193,30 +192,12 @@ async function install() {
     if (pkg === null) {
         throw new Error("Choose an image set first.");
     }
-    document.getElementById("fallback").hidden = true;
     await requestWakeLock();
     try {
         return installed(await flow.install(pkg));
-    } catch (error) {
-        if (error instanceof SuperStopped) {
-            document.getElementById("fallback").hidden = false;
-        }
-        throw error;
     } finally {
         await releaseWakeLock();
     }
-}
-
-async function fallback() {
-    await requestWakeLock();
-    let state;
-    try {
-        state = await flow.fallback(pkg);
-    } finally {
-        await releaseWakeLock();
-    }
-    document.getElementById("fallback").hidden = true;
-    return installed(state);
 }
 
 async function lock() {
@@ -306,7 +287,6 @@ function refresh() {
     setButtonState({ id: Buttons.UNLOCK, enabled: usb && !busy });
     setButtonState({ id: Buttons.UNLOCK_CRITICAL, enabled: usb && !busy });
     setButtonState({ id: Buttons.INSTALL, enabled: usb && !busy && confirmed });
-    setButtonState({ id: Buttons.FALLBACK, enabled: usb && !busy && record !== undefined && flow.resume });
     setButtonState({ id: Buttons.LOCK, enabled: usb && !busy && record !== undefined && lockAllowed(record)
         && flow.lockReady(pkg) });
     for (const id of ["folder-input", "files-input"]) {
@@ -360,9 +340,6 @@ async function choosePackage(list) {
             throw new Error(`These files do not match SHA256SUMS: ${wrong.join(", ")}. Get the image set again.`);
         }
         pkg = { ...result, files };
-        // The fastbootd steps belong to the set whose install stopped.
-        flow.resume = false;
-        document.getElementById("fallback").hidden = true;
         showPackage(result.record);
         status.textContent = `All ${result.needed.length} files the install uses match SHA256SUMS.`;
         log(`Image set ${result.record.build_id} checked`);
@@ -386,7 +363,6 @@ if ("usb" in navigator) {
     addButtonHook(Buttons.UNLOCK, unlock);
     addButtonHook(Buttons.UNLOCK_CRITICAL, unlockCritical, { recovery: true });
     addButtonHook(Buttons.INSTALL, install, { recovery: true });
-    addButtonHook(Buttons.FALLBACK, fallback, { recovery: true });
     addButtonHook(Buttons.LOCK, lock, { recovery: true });
     // The lock is offered only while the phone stays connected after the install.
     navigator.usb.addEventListener("connect", refresh);

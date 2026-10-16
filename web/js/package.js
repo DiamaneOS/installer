@@ -8,6 +8,7 @@ export const PRODUCT = "FP6";
 export const RECORD = "build.json";
 export const SUMS = "SHA256SUMS";
 export const SCRIPT = "flash-all.sh";
+export const SUPER_EMPTY = "super_empty.img";
 
 // Older flash-all.sh scripts check the critical partitions with this line, which writes nothing.
 const SCRIPT_CHECK = "fastboot oem device-info 2>&1 | grep -q ";
@@ -54,8 +55,10 @@ function flash(partition, file) {
 export function command(step) {
     switch (step.op) {
     case "flash": return `fastboot flash ${step.partition} ${step.file}`;
+    case "wipe-super": return `fastboot wipe-super ${step.file}`;
     case "set-active": return `fastboot --set-active=${step.slot}`;
     case "reboot": return "fastboot reboot";
+    case "reboot-fastboot": return "fastboot reboot fastboot";
     case "reboot-bootloader": return "fastboot reboot-bootloader";
     }
     throw new Error(`unknown step ${step.op}`);
@@ -75,8 +78,10 @@ export function lockAllowed(record) {
     return record.never_lock === false && customKey(record) !== null;
 }
 
-// A clean install from the bootloader, in the order of flash_all.commands(). A
-// set with a key ends in the bootloader, so that it is locked before Android starts.
+// A clean install from the bootloader, in the order of flash_all.commands(). The
+// logical partitions are written in fastbootd on an empty super layout, the rest
+// in the bootloader. A set with a key ends in the bootloader, so that it is
+// locked before Android starts.
 export function installSteps(record) {
     const slot = record.flash.slot;
     const steps = [];
@@ -92,7 +97,11 @@ export function installSteps(record) {
         steps.push(flash(`${name}_${slot}`, `${name}.img`));
     }
     if (record.flash.logical.length > 0) {
-        steps.push(flash("super", "super.img"));
+        steps.push({ op: "reboot-fastboot" }, { op: "wipe-super", file: SUPER_EMPTY });
+        for (const name of record.flash.logical) {
+            steps.push(flash(`${name}_${slot}`, `${name}.img`));
+        }
+        steps.push({ op: "reboot-bootloader" });
     }
     for (const [name, image] of Object.entries(record.wipe.images)) {
         steps.push(flash(name, image.file));
@@ -104,23 +113,6 @@ export function installSteps(record) {
         steps.push({ op: "set-active", slot }, { op: "reboot" });
     }
     return steps;
-}
-
-// The fastbootd steps that replace "flash super" after a stall, as flash-steps
-// prints them: every logical partition (the stalled flash may already have
-// written the new layout), then the steps that follow super, from the bootloader.
-export function fallbackSteps(record) {
-    const slot = record.flash.slot;
-    const steps = installSteps(record);
-    const index = steps.findIndex((step) => step.op === "flash" && step.partition === "super");
-    if (index < 0) {
-        return null;
-    }
-    return {
-        logical: record.flash.logical.map((name) => flash(`${name}_${slot}`, `${name}.img`)),
-        after: steps.slice(index + 1),
-        superIndex: index,
-    };
 }
 
 export function scriptCommands(text) {
@@ -205,7 +197,6 @@ export async function readPackage(files) {
     }
     checkRecord(record);
     const steps = installSteps(record);
-    const fallback = fallbackSteps(record);
     const expected = steps.map(command);
     const script = scriptCommands(await files.get(SCRIPT).text());
     if (script.length !== expected.length || script.some((line, i) => line !== expected[i])) {
@@ -213,8 +204,8 @@ export async function readPackage(files) {
             + "that matches this image set, or flash-all.sh.");
     }
     const needed = new Set([RECORD, SCRIPT]);
-    for (const step of [...steps, ...(fallback ? fallback.logical : [])]) {
-        if (step.op === "flash") {
+    for (const step of steps) {
+        if (step.file !== undefined) {
             needed.add(step.file);
         }
     }
@@ -227,7 +218,7 @@ export async function readPackage(files) {
         }
     }
     await checkKey(record, files);
-    return { record, sums, steps, fallback, needed: [...needed] };
+    return { record, sums, steps, needed: [...needed] };
 }
 
 export async function isSparse(blob) {
