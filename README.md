@@ -11,13 +11,6 @@ Installation and recovery tools and documentation for DiamaneOS.
   - [Hosting](docs/hosting.md): the host name, headers and deploy steps it needs.
 - [Install steps](docs/install-steps.md): how the web installer and the image set's `flash-all.sh`
   match, and how to keep them in step.
-- The [stock recovery preflight](docs/recovery-preflight.md):
-  source references, prerequisites and stop conditions for unlocking the
-  bootloader, restoring the stock OS and relocking.
-  - It covers the stock OS. It is not a DiamaneOS installation procedure.
-  - It is a checklist with stop conditions, not a copy-and-paste recipe.
-  - It is device-specific but host-portable: it relies on the official Android
-    platform tools, exact content hashes and device identity.
 
 ## Licence
 
