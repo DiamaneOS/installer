@@ -85,6 +85,7 @@ fastbootd instead.
 | `index.html`, `js/install.js` | The page and its script, from GrapheneOS's `web.html` and `web-install.js` |
 | `recovery.html` | What to do when an install or a lock fails |
 | `stock.html` | Returning to Fairphone's stock OS and locking it there |
+| `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
 | `js/package.js` | Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
