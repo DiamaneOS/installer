@@ -41,6 +41,7 @@ class FakeDevice {
         this.mode = "bootloader";
         this.unlocked = "yes";
         this.ability = 1;
+        this.snapshot = "none";
         this.sent = [];
         // What flash-all.sh would show: flashes, slot changes and restarts.
         this.events = [];
@@ -74,12 +75,16 @@ class FakeDevice {
         } else if (text.startsWith("reboot")) {
             this.events.push(text === "reboot-fastboot" ? "fastboot reboot fastboot" : `fastboot ${text}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
+        } else if (text === "snapshot-update:cancel") {
+            this.events.push("fastboot snapshot-update cancel");
+            this.snapshot = "none";
         } else if (text === "update-super:super:wipe") {
             this.events.push({ wipe: this.uploaded, mode: this.mode });
         } else if (text === "flashing lock") {
             this.locking = true;
         }
-        const values = { product: "FP6", unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no" };
+        const values = { product: "FP6", unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no",
+            "snapshot-update-status": this.snapshot };
         const replies = {
             "oem device-info": `Device unlocked: ${this.unlocked === "yes"}\nDevice critical unlocked: true\n`,
             "flashing get_unlock_ability": `get_unlock_ability: ${this.ability}\n`,
@@ -127,9 +132,17 @@ test("the install steps are those of the tools' flash_all.py and flash-all.sh", 
         const pkg = await fixturePackage(name);
         assert.deepEqual(pkg.steps.map(command), expected(name), name);
         assert.deepEqual(scriptCommands(await pkg.files.get(SCRIPT).text()), expected(name), name);
+        // After an update the phone may still have one pending, which the install cancels.
         const fake = new FakeDevice();
+        fake.snapshot = "merging";
         await new Flow(fake, restarting(fake)).install(pkg);
         assert.deepEqual(asScript(fake.events, pkg), expected(name), name);
+        // Without one, nothing is cancelled, as in flash-all.sh.
+        const plain = new FakeDevice();
+        await new Flow(plain, restarting(plain)).install(pkg);
+        assert.deepEqual(asScript(plain.events, pkg),
+            expected(name).filter((line) => line !== "fastboot snapshot-update cancel"), name);
+        assert.ok(!plain.sent.includes("snapshot-update:cancel"));
         // The phone is checked before the first write, as flash-all.sh does.
         assert.deepEqual(fake.sent.slice(0, 4),
             ["getvar:product", "getvar:is-userspace", "getvar:unlocked", "oem device-info"]);

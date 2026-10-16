@@ -196,9 +196,19 @@ export class Flow {
         let done = 0;
         let inBootloader = true;
         for (const [i, step] of steps.entries()) {
-            this.#ui.log(command(step));
             const count = `(${i + 1} of ${steps.length})`;
             const where = inBootloader ? "" : " in fastbootd";
+            if (step.op === "cancel-snapshot") {
+                // As fastboot flashall and fastboot.js: only when the bootloader reports a pending update.
+                const status = await this.getvar("snapshot-update-status");
+                if (status !== null && status !== "none") {
+                    this.#ui.log(`${command(step)} (status ${status})`);
+                    this.#ui.progress(`Cancelling a pending update ${count}`, done / total);
+                    await this.#command("snapshot-update:cancel");
+                }
+                continue;
+            }
+            this.#ui.log(command(step));
             if (step.op === "flash") {
                 const label = `Writing ${step.partition}${where} ${count}`;
                 this.#ui.progress(label, done / total);

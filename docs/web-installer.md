@@ -68,6 +68,8 @@ it.
 The bootloader can stall while it writes `super.img`, so the logical partitions are written in
 fastbootd instead.
 
+- Before the boot images it cancels an update the OS left pending, if `getvar
+  snapshot-update-status` reports one.
 - After the boot images the installer runs `reboot-fastboot`. Once the phone is back, it checks that
   it is in fastbootd and is the same product.
 - It writes the empty layout from `super_empty.img`, then each logical partition to slot a.

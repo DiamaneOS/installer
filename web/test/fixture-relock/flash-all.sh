@@ -31,6 +31,10 @@ fastboot flash logfs logfs_ufs_8mb.bin
 fastboot flash storsec storsec.mbn
 fastboot flash modemst1 modemst1.img
 fastboot flash modemst2 modemst2.img
+status=$(value snapshot-update-status)
+if [ -n "$status" ] && [ "$status" != none ]; then
+fastboot snapshot-update cancel
+fi
 fastboot flash boot_a boot.img
 fastboot flash vbmeta_a vbmeta.img
 fastboot reboot fastboot
