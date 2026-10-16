@@ -14,6 +14,9 @@ The installer needs a host name of its own, for example `install.diamaneos.de`.
   the example server answers on port 80.
 - **nginx:** the server in [`web/nginx/example.conf`](../web/nginx/example.conf), with `base.conf`,
   `installer.conf` and `general.conf` copied to `installer/` in the nginx configuration directory.
+- **Keepalive:** the HTTPS server keeps connections open (`keepalive_requests 64`,
+  `keepalive_timeout 15s`). With the hardened http block's `keepalive_timeout 0`, each HTTP/2
+  connection ends after one request and browsers give up on some of the page's modules.
 - **Files only:** no server code, no cookies, no request logs. The page loads nothing from other
   hosts and makes no network requests.
 
