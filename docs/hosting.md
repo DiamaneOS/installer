@@ -19,10 +19,11 @@ The installer needs a host name of its own, for example `install.diamaneos.de`.
 
 ## Headers
 
-- The installer page gets `installer.conf`: scripts, styles, images and workers from its own
-  origin only, Trusted Types with the one `installer` policy, no `connect-src`.
+- The installer page gets `installer.conf`: scripts, styles, fonts, images and workers from its
+  own origin only, Trusted Types with the one `installer` policy, no `connect-src`.
 - Its Permissions-Policy allows `usb` and `screen-wake-lock` for its own origin and nothing else.
-- Every other file gets `general.conf`: no USB, no workers, no Trusted Types policy.
+- Every other file gets `general.conf`: the same sources without workers, no USB and no Trusted
+  Types policy.
 - Every response gets `base.conf`: HSTS, `nosniff`, no referrer, same-origin COOP, COEP and CORP,
   and no framing.
 - `.mjs` files must be served as `text/javascript`, or the browser refuses fastboot.js.
