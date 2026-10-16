@@ -4,7 +4,8 @@
 // install steps follow flash_all.commands() in diamaneos-tools, and a set whose
 // flash-all.sh lists other commands is refused, so the two cannot drift apart.
 
-export const PRODUCT = "FP6";
+import { deviceName, supported } from "./devices.js";
+
 export const RECORD = "build.json";
 export const SUMS = "SHA256SUMS";
 export const SCRIPT = "flash-all.sh";
@@ -33,7 +34,7 @@ export const CRITICAL_UNLOCKED = "Device critical unlocked: true";
 export function checks(record) {
     return [
         { name: "product", wanted: record.product,
-          message: `This image set is for the ${record.product}. Connect that phone in Fastboot Mode.` },
+          message: `This image set is for the ${deviceName(record.product)}. Connect that phone in Fastboot Mode.` },
         { name: "is-userspace", wanted: "no",
           message: "The phone is in fastbootd. Restart it into Fastboot Mode and start again." },
         { name: "unlocked", wanted: "yes",
@@ -150,8 +151,8 @@ function checkRecord(record) {
     if (!ok) {
         throw new PackageError("build.json is not an image set record this installer knows.");
     }
-    if (record.product !== PRODUCT) {
-        throw new PackageError(`This image set is for the ${record.product}. This installer is for the ${PRODUCT}.`);
+    if (!supported(record.product)) {
+        throw new PackageError(`This image set is for ${record.product}, which this installer does not support.`);
     }
 }
 

@@ -1,7 +1,8 @@
 // @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&dn=expat.txt MIT
 
+import { DEVICES_PAGE, bootHint, restartHint, supported } from "./devices.js";
 import {
-    CRITICAL_UNLOCKED, PRODUCT, checks, command, isSparse, lockAllowed, withAvbFooter, writesFirmware,
+    CRITICAL_UNLOCKED, checks, command, isSparse, lockAllowed, withAvbFooter, writesFirmware,
 } from "./package.js";
 
 // How long the phone may leave a USB transfer unanswered before the installer
@@ -11,9 +12,6 @@ import {
 // lock the phone may start Android instead of returning to the bootloader.
 export const SECONDS = { flash: 60, command: 30, confirm: 300, back: 120 };
 
-const RESTART = "Hold Power and Volume down until it restarts into Fastboot Mode.";
-const DEAD = `The phone stopped answering. ${RESTART} Then try again.`;
-
 export class PhoneError extends Error {
     constructor(message) {
         super(message);
@@ -22,8 +20,8 @@ export class PhoneError extends Error {
 }
 
 export class StallError extends Error {
-    constructor(seconds) {
-        super(`The phone stopped answering for ${seconds} seconds. ${RESTART}`);
+    constructor(seconds, hint) {
+        super(`The phone stopped answering for ${seconds} seconds. ${hint}`);
         this.name = "StallError";
     }
 }
@@ -42,6 +40,8 @@ export class Flow {
     #dead = null;
     // The set installed on this connection, until it is locked.
     #installed = null;
+    // The product the phone or the image set last named, for the restart hint.
+    #product = null;
 
     constructor(device, ui, seconds = SECONDS) {
         this.#device = device;
@@ -50,7 +50,7 @@ export class Flow {
         const run = device.runCommand.bind(device);
         device.runCommand = async (text) => {
             if (this.#isDead()) {
-                throw new PhoneError(DEAD);
+                throw new PhoneError(this.#deadMessage());
             }
             return await run(text);
         };
@@ -71,6 +71,10 @@ export class Flow {
 
     #isDead() {
         return this.#device.device != null && this.#device.device === this.#dead;
+    }
+
+    #deadMessage() {
+        return `The phone stopped answering. ${restartHint(this.#product)} Then try again.`;
     }
 
     // Counts the transfers in flight on the current USB device, which changes
@@ -97,7 +101,7 @@ export class Flow {
 
     async #call(action, seconds = this.#seconds.command) {
         if (this.#isDead()) {
-            throw new PhoneError(DEAD);
+            throw new PhoneError(this.#deadMessage());
         }
         this.#watch();
         const usb = this.#device.device;
@@ -113,7 +117,7 @@ export class Flow {
                 this.#ui.waiting(waited >= 10000 ? Math.floor(waited / 1000) : null);
                 if (waited > limit) {
                     this.#dead = usb;
-                    reject(new StallError(seconds));
+                    reject(new StallError(seconds, restartHint(this.#product)));
                 }
             }, Math.min(1000, limit / 4));
         });
@@ -125,8 +129,12 @@ export class Flow {
         }
     }
 
-    getvar(name) {
-        return this.#call(() => this.#device.getVariable(name));
+    async getvar(name) {
+        const value = await this.#call(() => this.#device.getVariable(name));
+        if (name === "product" && supported(value)) {
+            this.#product = value;
+        }
+        return value;
     }
 
     async #command(text) {
@@ -141,7 +149,7 @@ export class Flow {
 
     async #restart(message, seconds) {
         if (!(await this.#ui.reconnect(message, seconds))) {
-            throw new PhoneError(`The phone did not restart. ${RESTART} Then press Connect.`);
+            throw new PhoneError(`The phone did not restart. ${restartHint(this.#product)} Then press Connect.`);
         }
     }
 
@@ -263,6 +271,7 @@ export class Flow {
     // Resolves to the phone's state when it waits in the bootloader for the lock.
     async install(pkg) {
         this.#installed = null;
+        this.#product = pkg.record.product;
         await this.#ui.connect();
         await this.#bootloaderChecks(pkg.record, true);
         await this.#run(pkg, pkg.steps);
@@ -272,8 +281,9 @@ export class Flow {
     async #checkedState() {
         await this.#ui.connect();
         const state = await this.state();
-        if (state.product !== PRODUCT) {
-            throw new PhoneError(`This installer is for the ${PRODUCT}, and the phone reports ${state.product}.`);
+        if (!supported(state.product)) {
+            throw new PhoneError(`The phone reports ${state.product ?? "no product"}, which this installer does not `
+                + `support. ${DEVICES_PAGE} lists the supported devices.`);
         }
         if (state.userspace === "yes") {
             throw new PhoneError("The phone is in fastbootd. Restart it into Fastboot Mode and start again.");
@@ -358,11 +368,11 @@ export class Flow {
         this.#installed = null;
         await this.#lockCommand("flashing lock");
         const back = await this.#ui.reconnect("Confirm on the phone with the volume and power buttons. It erases "
-            + "all data and restarts. Hold Volume down while it restarts, so that it returns to Fastboot Mode for "
-            + "the check.", this.#seconds.confirm, this.#seconds.back);
+            + `all data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode for the check.`,
+            this.#seconds.confirm, this.#seconds.back);
         if (back === false) {
-            throw new PhoneError(`The phone did not restart, so the lock was not confirmed. ${RESTART} Then press `
-                + "Connect.");
+            throw new PhoneError("The phone did not restart, so the lock was not confirmed. "
+                + `${restartHint(record.product)} Then press Connect.`);
         }
         if (back === null) {
             return null;

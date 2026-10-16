@@ -33,8 +33,9 @@
         <main id="web-install" tabindex="-1">
             <h1><a href="#web-install">Web installer</a></h1>
 
-            <p>This page installs DiamaneOS on a Fairphone 6 over USB. It reads the image set from this
-            computer and sends nothing over the network.</p>
+            <p>This page installs DiamaneOS on a
+            <a href="https://diamaneos.de/devices/" rel="noreferrer">supported device</a> over USB. It reads
+            the image set from this computer and sends nothing over the network.</p>
 
             <p>It runs the same steps as the image set's <code>flash-all.sh</code>. If an install fails,
             see <a href="recovery.html">what to do</a>. To leave DiamaneOS, see
@@ -76,19 +77,21 @@
             <section id="allowing-unlocking">
                 <h2><a href="#allowing-unlocking">Allowing unlocking</a></h2>
 
-                <p>In Android on the phone, turn on OEM unlocking in Developer options, as
-                <a href="https://support.fairphone.com/hc/en-us/articles/10492476238865-How-to-unlock-or-lock-your-Fairphone-s-bootloader" rel="noreferrer">Fairphone
-                describes</a>. The phone checks online first.</p>
+                <p>In Android on the phone, turn on OEM unlocking in Developer options, as the device maker
+                describes. The <a href="https://diamaneos.de/devices/" rel="noreferrer">supported devices</a>
+                page links its guide. The phone checks online first.</p>
 
-                <p>Note the build number in Settings > About phone. The install writes the Fairphone firmware
-                the image set carries, and the phone must not already run a newer Fairphone release.</p>
+                <p>Note the build number in Settings > About phone. The install writes the device maker's
+                firmware that the image set carries, and the phone must not already run a newer stock
+                release.</p>
             </section>
 
             <section id="connecting">
                 <h2><a href="#connecting">Connecting the phone</a></h2>
 
-                <p>Turn the phone off. Hold Volume down while it starts, until it shows Fastboot Mode. Connect
-                it to this computer and press Connect.</p>
+                <p>Turn the phone off and start it in Fastboot Mode with its bootloader keys, which the
+                <a href="https://diamaneos.de/devices/" rel="noreferrer">supported devices</a> page lists.
+                Connect it to this computer and press Connect.</p>
 
                 <button id="connect-button" disabled="">Connect</button>
 
@@ -104,9 +107,9 @@
                 <ol>
                     <li>Press Unlock bootloader. On the phone, choose to unlock with the volume buttons and
                     press Power.</li>
-                    <li>The phone erases itself and restarts. Hold Volume down while it restarts, so that it
-                    returns to Fastboot Mode before Android starts.</li>
-                    <li>If Android starts, turn the phone off. Then hold Volume down while it starts.</li>
+                    <li>The phone erases itself and restarts. Use the bootloader keys while it restarts, so
+                    that it returns to Fastboot Mode before Android starts.</li>
+                    <li>If Android starts, turn the phone off. Then start it in Fastboot Mode.</li>
                     <li>Press Connect, then Unlock critical partitions, and confirm on the phone the same way.
                     Return to Fastboot Mode again.</li>
                 </ol>
@@ -145,18 +148,23 @@
             <section id="installing">
                 <h2><a href="#installing">Installing</a></h2>
 
-                <p>The install erases all data on the phone. It writes the firmware to both slots, then
-                DiamaneOS to slot a, then empty data partitions. Leave the phone alone until it is
-                finished.</p>
+                <p>The install erases all data on the phone. Leave the phone alone until it is finished.</p>
 
-                <p>For the system partitions the phone restarts into fastbootd, then back into Fastboot
-                Mode. After each restart the browser may ask you to choose the phone again.</p>
+                <ol>
+                    <li>In Fastboot Mode it writes the device maker's firmware to both slots. It cancels a
+                    pending system update, if the phone reports one, and writes DiamaneOS's boot images to
+                    slot a.</li>
+                    <li>The phone restarts into fastbootd, which writes an empty partition layout and then the
+                    system partitions.</li>
+                    <li>The phone returns to Fastboot Mode for the empty data partitions.</li>
+                    <li>An image set that can be locked also installs its signing key, and the phone restarts
+                    into Fastboot Mode for the lock. Any other set restarts into DiamaneOS.</li>
+                </ol>
 
-                <p>An image set that can be locked also installs its signing key, and the phone returns to
-                Fastboot Mode for the lock. Any other set restarts into DiamaneOS.</p>
+                <p>After each restart, press Connect again if the installer asks, and choose the phone.</p>
 
                 <p id="firmware-check" hidden=""><label><input type="checkbox" id="firmware-confirm"/> The
-                phone does not run a newer Fairphone release than
+                phone does not run a newer stock release than
                 <span id="firmware-release">the one in the image set</span>.</label></p>
 
                 <button id="install-button" disabled="">Install</button>
@@ -185,7 +193,7 @@
                     error.</li>
                     <li>Locking erases all data on the phone.</li>
                     <li>Each start then shows a yellow warning screen with the ID of the key the OS is signed
-                    with. This is expected: DiamaneOS boots with its own key, not Fairphone's.</li>
+                    with. This is expected: DiamaneOS boots with its own key, not the device maker's.</li>
                     <li>The installer locks only the bootloader, never the critical partitions.</li>
                     <li>It never locks an image set that must stay unlocked, such as one signed with public
                     test keys. Anyone can sign images with those keys.</li>
@@ -199,8 +207,8 @@
                     that the phone allows unlocking.</li>
                     <li>Confirm on the phone with the volume and power buttons. The phone erases all data and
                     restarts.</li>
-                    <li>Hold Volume down while it restarts, so that it returns to Fastboot Mode. The installer
-                    then checks that the bootloader is locked. Choose Start on the phone.</li>
+                    <li>Use the bootloader keys while it restarts, so that it returns to Fastboot Mode. The
+                    installer then checks that the bootloader is locked. Choose Start on the phone.</li>
                     <li>The last setup screen offers to turn OEM unlocking off, and that choice is selected.
                     Keep it. Turn it on again only to unlock the bootloader.</li>
                 </ol>
@@ -213,8 +221,8 @@
             <section id="stock">
                 <h2><a href="#stock">Returning to the stock OS</a></h2>
 
-                <p>See <a href="stock.html">returning to the stock OS</a>. It removes the DiamaneOS key from
-                the phone and installs Fairphone's factory package.</p>
+                <p>See <a href="stock.html">returning to the stock OS</a>. It installs the device maker's
+                stock OS, then removes the DiamaneOS key before the lock.</p>
             </section>
 
             <details id="log-section">
