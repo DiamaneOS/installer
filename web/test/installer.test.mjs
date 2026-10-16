@@ -4,10 +4,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
-import { DEVICES, restartHint, supported } from "../js/devices.js";
 import { Flow, PhoneError, StallError } from "../js/flow.js";
 import {
-    PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, scriptCommands, withAvbFooter,
+    DEVICES, PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, restartHint, scriptCommands,
+    supported, withAvbFooter,
 } from "../js/package.js";
 import { Sha256 } from "../js/sha256.js";
 

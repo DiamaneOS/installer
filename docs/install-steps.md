@@ -28,7 +28,7 @@ from the bootloader, which can stall while it writes it.
 
 | Check | `flash-all.sh` | Web installer |
 | --- | --- | --- |
-| The phone | `getvar product` is the set's product | the same, and the product is in `js/devices.js` |
+| The phone | `getvar product` is the set's product | the same, and the product is in `DEVICES` |
 | Bootloader, not fastbootd | `getvar is-userspace` is `no` | the same |
 | Unlocked | `getvar unlocked` is `yes` | the same |
 | Critical partitions, if it writes firmware | `oem device-info` | the same |
