@@ -7,7 +7,7 @@ what they share and where they differ, so that a change to one reaches the other
 
 Both take the steps from the set's `build.json`, as `flash_all.commands()` in diamaneos-tools does:
 
-1. `firmware.steps`: the Fairphone firmware, both slots of each A/B partition, in the stock order.
+1. `firmware.steps`: the device maker's firmware, both slots of each A/B partition, in the stock order.
 2. `firmware.reset`: the empty modem file system images (`modemst1`, `modemst2`).
 3. When `flash.logical` is not empty: `snapshot-update cancel`, only if `getvar
    snapshot-update-status` reports something other than `none`, as `fastboot flashall` and
@@ -28,12 +28,12 @@ from the bootloader, which can stall while it writes it.
 
 | Check | `flash-all.sh` | Web installer |
 | --- | --- | --- |
-| The phone | `getvar product` | the same |
+| The phone | `getvar product` is the set's product | the same, and the product is in `js/devices.js` |
 | Bootloader, not fastbootd | `getvar is-userspace` is `no` | the same |
 | Unlocked | `getvar unlocked` is `yes` | the same |
 | Critical partitions, if it writes firmware | `oem device-info` | the same |
 | Files | `sha256sum -c SHA256SUMS`, every file | every file it uses |
-| No newer Fairphone release on the phone | a warning in the output | a box to tick |
+| No newer stock release on the phone | a warning in the output | a box to tick |
 | Its own steps | none | the same as the set's `flash-all.sh` |
 | The key signs `vbmeta.img` | none | refuses the set otherwise |
 

@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
+import { DEVICES, restartHint, supported } from "../js/devices.js";
 import { Flow, PhoneError, StallError } from "../js/flow.js";
 import {
     PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, scriptCommands, withAvbFooter,
@@ -33,12 +34,13 @@ function expected(name) {
     return COMMANDS[name].map((args) => `fastboot ${args.join(" ")}`);
 }
 
-// Answers like an FP6 bootloader, or fastbootd after "reboot-fastboot".
+// Answers like the bootloader of the fixtures' device, or fastbootd after "reboot-fastboot".
 // stall(text, device) returns true for the command the phone never answers.
 class FakeDevice {
     constructor(stall = () => false) {
         this.stall = stall;
         this.mode = "bootloader";
+        this.product = "FP6";
         this.unlocked = "yes";
         this.ability = 1;
         this.snapshot = "none";
@@ -83,7 +85,7 @@ class FakeDevice {
         } else if (text === "flashing lock") {
             this.locking = true;
         }
-        const values = { product: "FP6", unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no",
+        const values = { product: this.product, unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no",
             "snapshot-update-status": this.snapshot };
         const replies = {
             "oem device-info": `Device unlocked: ${this.unlocked === "yes"}\nDevice critical unlocked: true\n`,
@@ -160,7 +162,8 @@ test("a set whose files or flash-all.sh disagree is refused", async () => {
     const record = JSON.parse(readFileSync(new URL("./fixture/build.json", import.meta.url), "utf8"));
     const cases = {
         "lists other steps": ["fixture", { [SCRIPT]: script.replace("fastboot reboot\n", "fastboot erase userdata\nfastboot reboot\n") }],
-        "for the FP5": ["fixture", { "build.json": JSON.stringify({ ...record, product: "FP5" }) }],
+        "for FP5, which this installer does not support": ["fixture", { "build.json": JSON.stringify({ ...record, product: "FP5" }) }],
+        "for constructor, which": ["fixture", { "build.json": JSON.stringify({ ...record, product: "constructor" }) }],
         "malformed": ["fixture", { SHA256SUMS: "not a sum\n" }],
         "not the key that signs vbmeta.img": ["fixture-relock", { "avb_pkmd.bin": "another key\n" }],
     };
@@ -171,6 +174,32 @@ test("a set whose files or flash-all.sh disagree is refused", async () => {
     const files = fixtureFiles("fixture");
     files.delete("vendor.img");
     await assert.rejects(readPackage(files), /vendor.img is missing/);
+});
+
+test("only a supported phone that matches the image set is unlocked or installed", async () => {
+    assert.ok(supported("FP6") && !supported("FP5") && !supported("toString") && !supported(null));
+    // Unlocking needs no image set: the phone must be a supported device.
+    for (const product of ["FP5", "__proto__", null]) {
+        const fake = new FakeDevice();
+        fake.product = product;
+        fake.unlocked = "no";
+        await assert.rejects(new Flow(fake, ui).unlock(false), /does not support/);
+        assert.ok(!fake.sent.some((text) => /^flashing (un)?lock/.test(text)), String(product));
+    }
+    const fake = new FakeDevice();
+    fake.unlocked = "no";
+    await new Flow(fake, ui).unlock(false);
+    assert.equal(fake.sent.at(-1), "flashing unlock");
+    // Installing: the phone must report the set's product before the first write.
+    const pkg = await fixturePackage("fixture-relock");
+    const other = new FakeDevice();
+    other.product = "FP5";
+    await assert.rejects(new Flow(other, restarting(other)).install(pkg), new RegExp(`for the ${DEVICES.FP6.name}`));
+    assert.deepEqual(other.sent, ["getvar:product"]);
+    assert.deepEqual(other.events, []);
+    // A restart hint takes the buttons from the data.
+    assert.match(restartHint("FP6"), new RegExp(DEVICES.FP6.force));
+    assert.doesNotMatch(restartHint("FP5"), /undefined/);
 });
 
 test("the logical partitions are written in fastbootd, everything else in the bootloader", async () => {

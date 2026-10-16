@@ -3,6 +3,7 @@
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
 import { Flow } from "./flow.js";
 import { hashFiles } from "./hash.js";
+import { deviceName } from "./devices.js";
 import { customKey, lockAllowed, readPackage, writesFirmware } from "./package.js";
 
 const Buttons = {
@@ -153,7 +154,7 @@ const flow = new Flow(device, {
 });
 
 function describe(state) {
-    const lines = [`${state.product ?? "Unknown phone"} in ${state.userspace === "yes" ? "fastbootd" : "the bootloader"}.`];
+    const lines = [`${deviceName(state.product) ?? "Unknown phone"} in ${state.userspace === "yes" ? "fastbootd" : "the bootloader"}.`];
     if (state.userspace !== "yes") {
         lines.push(`Bootloader ${state.unlocked === "yes" ? "unlocked" : "locked"}.`);
         if (state.critical !== null) {
@@ -297,8 +298,8 @@ function refresh() {
 function showPackage(record) {
     const firmware = writesFirmware(record) ? record.firmware.release : null;
     document.getElementById("package-summary").textContent = [
-        `DiamaneOS ${record.build_id} for the ${record.product}.`,
-        firmware ? `It writes Fairphone's ${firmware} firmware.` : "",
+        `DiamaneOS ${record.build_id} for the ${deviceName(record.product)}.`,
+        firmware ? `It writes the device maker's ${firmware} firmware.` : "",
         record.notice ?? "",
     ].join(" ").trim();
     document.getElementById("firmware-release").textContent = firmware ?? "the one in the image set";
