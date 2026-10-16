@@ -8,6 +8,16 @@ web/ is a fork of GrapheneOS's web installer
 (https://github.com/GrapheneOS/grapheneos.org), Copyright © 2014-2026
 GrapheneOS, and is licensed under the MIT licence in web/LICENSE.
 
+web/fonts/SofiaSans-latin-wght.woff2 is the DiamaneOS website's Latin subset of
+Sofia Sans, Copyright 2019 The Sofia Sans Project Authors
+(https://github.com/lettersoup/Sofia-Sans). It is a Modified Version under the
+SIL Open Font License 1.1, with no Reserved Font Name, and keeps that licence.
+The full text is in web/fonts/OFL.txt.
+
+The DiamaneOS lockup in the pages' header is DiamaneOS artwork under Apache-2.0,
+from the website's brand files. No licence here grants use of the DiamaneOS name
+or mark as trademarks.
+
 web/js/fastboot/ffe7e270/ is GrapheneOS's build of fastboot.js (MIT, Copyright
 (c) 2021 Danny Lin), which bundles zip.js (BSD-3-Clause, Copyright (c) 2022
 Gildas Lormeau). Their licence texts are in web/js/fastboot/ffe7e270/NOTICE.

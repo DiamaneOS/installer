@@ -280,3 +280,15 @@ test("an AVB footer moves to the end of a larger partition, as fastboot does", a
     assert.equal(await withAvbFooter(image, image.size), image);
     assert.equal(await withAvbFooter(new Blob([new Uint8Array(1064)]), 4096).then((b) => b.size), 1064);
 });
+
+test("every page gets its font from its own origin, which both policies allow", () => {
+    const web = new URL("../", import.meta.url);
+    const css = readFileSync(new URL("style.css", web), "utf8");
+    const fonts = [...css.matchAll(/url\("([^"]+)"\)/g)].map((m) => m[1]);
+    assert.deepEqual(fonts, ["fonts/SofiaSans-latin-wght.woff2"]);
+    assert.ok(readFileSync(new URL(fonts[0], web)).length > 0);
+    for (const policy of ["installer.conf", "general.conf"]) {
+        const csp = readFileSync(new URL(`nginx/${policy}`, web), "utf8").match(/Content-Security-Policy "([^"]+)"/)[1];
+        assert.match(csp, /(^|; )font-src 'self';/);
+    }
+});
