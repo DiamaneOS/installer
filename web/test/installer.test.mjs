@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
-import { Flow, PhoneError, StallError, SuperStopped } from "../js/flow.js";
+import { Flow, PhoneError, StallError } from "../js/flow.js";
 import {
     PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, scriptCommands, withAvbFooter,
 } from "../js/package.js";
@@ -72,8 +72,10 @@ class FakeDevice {
         if (text.startsWith("set_active:")) {
             this.events.push(`fastboot --set-active=${text.slice("set_active:".length)}`);
         } else if (text.startsWith("reboot")) {
-            this.events.push(`fastboot ${text}`);
+            this.events.push(text === "reboot-fastboot" ? "fastboot reboot fastboot" : `fastboot ${text}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
+        } else if (text === "update-super:super:wipe") {
+            this.events.push({ wipe: this.uploaded, mode: this.mode });
         } else if (text === "flashing lock") {
             this.locking = true;
         }
@@ -85,13 +87,16 @@ class FakeDevice {
         return { text: (text.startsWith("getvar:") ? values[text.slice("getvar:".length)] : replies[text]) ?? "" };
     }
 
-    // As fastboot.js: an upload and a flash command per part, super in two parts.
+    // As fastboot.js: an upload, then the flash command.
     async flashBlob(partition, blob) {
-        for (let part = 0; part < (partition === "super" ? 2 : 1); part++) {
-            await this.runCommand(`download:${part}`);
-            await this.runCommand(`flash:${partition}`);
-        }
-        this.events.push([partition, blob]);
+        await this.runCommand("download:0");
+        await this.runCommand(`flash:${partition}`);
+        this.events.push([partition, blob, this.mode]);
+    }
+
+    async upload(partition, buffer) {
+        await this.runCommand(`download:${buffer.byteLength}`);
+        this.uploaded = new Uint8Array(buffer);
     }
 }
 
@@ -102,10 +107,19 @@ function restarting(fake) {
     return { ...ui, reconnect: async () => (fake.reconnected(), true) };
 }
 
-// The fake phone's events, written as flash-all.sh would write them.
+// The fake phone's events, written as flash-all.sh would write them. make-fixture.py
+// writes "fixture <name>" into each image, which names the uploaded super layout.
 function asScript(events, pkg) {
     const names = new Map([...pkg.files].map(([name, blob]) => [blob, name]));
-    return events.map((event) => (Array.isArray(event) ? `fastboot flash ${event[0]} ${names.get(event[1])}` : event));
+    return events.map((event) => {
+        if (Array.isArray(event)) {
+            return `fastboot flash ${event[0]} ${names.get(event[1])}`;
+        }
+        if (event.wipe !== undefined) {
+            return `fastboot wipe-super ${new TextDecoder().decode(event.wipe).slice("fixture ".length).trim()}`;
+        }
+        return event;
+    });
 }
 
 test("the install steps are those of the tools' flash_all.py and flash-all.sh", async () => {
@@ -146,36 +160,27 @@ test("a set whose files or flash-all.sh disagree is refused", async () => {
     await assert.rejects(readPackage(files), /vendor.img is missing/);
 });
 
-test("a stall after the first part of super is finished through fastbootd", async () => {
+test("the logical partitions are written in fastbootd, everything else in the bootloader", async () => {
     for (const name of FIXTURES) {
         const pkg = await fixturePackage(name);
-        const stallOnce = (text, fake) => text === "download:1" && !fake.stalledBefore && (fake.stalledBefore = true);
-        const fake = new FakeDevice(stallOnce);
-        const flow = new Flow(fake, restarting(fake), FAST);
-        await assert.rejects(flow.install(pkg), SuperStopped);
-        assert.equal(flow.resume, true);
-        const before = fake.events.length;
-        fake.reconnected();
-        await flow.fallback(pkg);
-        // The steps flash-steps prints for a stalled super, then the rest of flash-all.sh.
-        const all = expected(name);
-        assert.deepEqual(asScript(fake.events.slice(before), pkg), [
-            "fastboot reboot-fastboot",
-            "fastboot flash system_a system.img",
-            "fastboot flash vendor_a vendor.img",
-            "fastboot reboot-bootloader",
-            ...all.slice(all.indexOf("fastboot flash super super.img") + 1),
-        ], name);
-        assert.equal(flow.resume, false);
+        const fake = new FakeDevice();
+        await new Flow(fake, restarting(fake)).install(pkg);
+        const writes = fake.events.filter((event) => typeof event !== "string")
+            .map((event) => (Array.isArray(event) ? [event[0], event[2]] : ["wipe-super", event.mode]));
+        assert.deepEqual(writes.filter(([, mode]) => mode === "fastbootd").map(([what]) => what),
+            ["wipe-super", "system_a", "vendor_a"], name);
+        // Back in the bootloader, the phone is checked again before the data images.
+        const back = fake.sent.lastIndexOf("reboot-bootloader", fake.sent.indexOf("flash:frp"));
+        assert.deepEqual(fake.sent.slice(back + 1, back + 4), ["getvar:product", "getvar:is-userspace",
+            "getvar:unlocked"], name);
     }
 });
 
-test("a stall anywhere else stops the install, without cutting the reply short", async () => {
+test("a stall stops the install, without cutting the reply short", async () => {
     const pkg = await fixturePackage("fixture");
     const fake = new FakeDevice((text) => text === "flash:boot_a");
     const flow = new Flow(fake, ui, FAST);
     await assert.rejects(flow.install(pkg), StallError);
-    assert.equal(flow.resume, false);
     assert.notEqual(fake.device.closed, true);
     // Nothing more reaches the phone until it restarts.
     const sent = fake.sent.length;

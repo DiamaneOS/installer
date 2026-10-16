@@ -5,10 +5,10 @@ import {
 } from "./package.js";
 
 // How long the phone may leave a USB transfer unanswered before the installer
-// takes the bootloader for dead. A part of super takes about 20 seconds to send,
-// with transfers every few ms. Other commands answer within seconds. Unlocking
-// and locking may wait for the user's choice on the phone. After the lock the
-// phone may start Android instead of returning to the bootloader.
+// takes the bootloader for dead. A part of a large image takes about 20 seconds
+// to send, with transfers every few ms. Other commands answer within seconds.
+// Unlocking and locking may wait for the user's choice on the phone. After the
+// lock the phone may start Android instead of returning to the bootloader.
 export const SECONDS = { flash: 60, command: 30, confirm: 300, back: 120 };
 
 const RESTART = "Hold Power and Volume down until it restarts into Fastboot Mode.";
@@ -28,14 +28,6 @@ export class StallError extends Error {
     }
 }
 
-// Writing super stopped after the bootloader had taken at least one part.
-export class SuperStopped extends Error {
-    constructor(parts, cause) {
-        super(`Writing super stopped after part ${parts}. ${cause.message}`, { cause });
-        this.name = "SuperStopped";
-    }
-}
-
 // device: a fastboot.js FastbootDevice. ui: connect(), reconnect(message,
 // seconds, back) resolving to false if the phone did not leave in time and null
 // if it did not come back in time, progress(text, fraction), waiting(seconds or
@@ -45,14 +37,11 @@ export class Flow {
     #ui;
     #seconds;
     #transfers = new WeakMap();
-    #superParts = 0;
     // The USB device whose bootloader stopped answering. The installer never
     // closes it: a reply cut short leaves the bootloader unable to answer.
     #dead = null;
     // The set installed on this connection, until it is locked.
     #installed = null;
-    // Set after super stopped part way, until the fastbootd steps finish.
-    resume = false;
 
     constructor(device, ui, seconds = SECONDS) {
         this.#device = device;
@@ -63,11 +52,7 @@ export class Flow {
             if (this.#isDead()) {
                 throw new PhoneError(DEAD);
             }
-            const reply = await run(text);
-            if (text === "flash:super") {
-                this.#superParts++;
-            }
-            return reply;
+            return await run(text);
         };
         // fastboot.js gives up on a getvar after 10 seconds but leaves its read
         // pending, and that read then takes the reply to the next command.
@@ -202,37 +187,50 @@ export class Flow {
         await this.#call(() => this.#device.flashBlob(partition, image, onProgress), this.#seconds.flash);
     }
 
-    async #run(pkg, steps, inBootloader) {
-        const where = inBootloader ? "" : " in fastbootd";
-        const sizes = steps.map((step) => (step.op === "flash" ? pkg.files.get(step.file).size : 0));
+    // Runs the steps from the bootloader. The logical partitions are written in
+    // fastbootd, between the restarts into it and back.
+    async #run(pkg, steps) {
+        const record = pkg.record;
+        const sizes = steps.map((step) => (step.file === undefined ? 0 : pkg.files.get(step.file).size));
         const total = sizes.reduce((sum, size) => sum + size, 0) || 1;
         let done = 0;
+        let inBootloader = true;
         for (const [i, step] of steps.entries()) {
             this.#ui.log(command(step));
             const count = `(${i + 1} of ${steps.length})`;
+            const where = inBootloader ? "" : " in fastbootd";
             if (step.op === "flash") {
-                const before = this.#superParts;
-                const label = () => (step.partition === "super"
-                    ? `Writing super, part ${this.#superParts - before + 1} ${count}`
-                    : `Writing ${step.partition}${where} ${count}`);
-                this.#ui.progress(label(), done / total);
-                try {
-                    await this.#flash(step.partition, pkg.files.get(step.file), inBootloader,
-                        (fraction) => this.#ui.progress(label(), (done + fraction * sizes[i]) / total));
-                } catch (error) {
-                    if (step.partition === "super" && this.#superParts > before && pkg.fallback) {
-                        this.resume = true;
-                        throw new SuperStopped(this.#superParts - before, error);
-                    }
-                    throw error;
-                }
-                done += sizes[i];
+                const label = `Writing ${step.partition}${where} ${count}`;
+                this.#ui.progress(label, done / total);
+                await this.#flash(step.partition, pkg.files.get(step.file), inBootloader,
+                    (fraction) => this.#ui.progress(label, (done + fraction * sizes[i]) / total));
+            } else if (step.op === "wipe-super") {
+                // As fastboot flashall does: fastbootd writes the uploaded empty layout to super.
+                this.#ui.progress(`Writing an empty super layout${where} ${count}`, done / total);
+                const data = await pkg.files.get(step.file).arrayBuffer();
+                await this.#call(() => this.#device.upload("super", data), this.#seconds.flash);
+                await this.#command("update-super:super:wipe");
             } else if (step.op === "set-active") {
                 this.#ui.progress(`Selecting slot ${step.slot} ${count}`, done / total);
                 await this.#command(`set_active:${step.slot}`);
+            } else if (step.op === "reboot-fastboot") {
+                this.#ui.progress(`Starting fastbootd ${count}`, done / total);
+                await this.#command(step.op);
+                await this.#restart("The phone is starting fastbootd.");
+                await this.#expect("is-userspace", "yes",
+                    "The phone did not start fastbootd. Restart it into Fastboot Mode and install again.");
+                await this.#expect("product", record.product, checks(record)[0].message);
+                inBootloader = false;
+            } else if (step.op === "reboot-bootloader" && i < steps.length - 1) {
+                this.#ui.progress(`Returning to Fastboot Mode ${count}`, done / total);
+                await this.#command(step.op);
+                await this.#restart("The phone is restarting into Fastboot Mode.");
+                await this.#bootloaderChecks(record, false);
+                inBootloader = true;
             } else {
                 await this.#command(step.op);
             }
+            done += sizes[i];
         }
         this.#ui.progress("Done", 1);
     }
@@ -254,38 +252,10 @@ export class Flow {
 
     // Resolves to the phone's state when it waits in the bootloader for the lock.
     async install(pkg) {
-        this.resume = false;
         this.#installed = null;
         await this.#ui.connect();
         await this.#bootloaderChecks(pkg.record, true);
-        await this.#run(pkg, pkg.steps, true);
-        return await this.#finish(pkg);
-    }
-
-    // After a stall in super: the logical partitions from fastbootd, then the
-    // rest of the install from the bootloader. The steps before super are done.
-    async fallback(pkg) {
-        const record = pkg.record;
-        const [product] = checks(record);
-        this.#installed = null;
-        await this.#ui.connect();
-        await this.#expect("product", record.product, product.message);
-        if (await this.getvar("is-userspace") !== "yes") {
-            await this.#expect("unlocked", "yes", "The bootloader is locked. Unlock it first.");
-            this.#ui.log("fastboot reboot fastboot");
-            await this.#command("reboot-fastboot");
-            await this.#restart("The phone is starting fastbootd.");
-            await this.#expect("is-userspace", "yes",
-                "The phone did not start fastbootd. Restart it into Fastboot Mode and try again.");
-            await this.#expect("product", record.product, product.message);
-        }
-        await this.#run(pkg, pkg.fallback.logical, false);
-        this.#ui.log("fastboot reboot bootloader");
-        await this.#command("reboot-bootloader");
-        await this.#restart("The phone is restarting into Fastboot Mode.");
-        await this.#bootloaderChecks(record, false);
-        await this.#run(pkg, pkg.fallback.after, true);
-        this.resume = false;
+        await this.#run(pkg, pkg.steps);
         return await this.#finish(pkg);
     }
 

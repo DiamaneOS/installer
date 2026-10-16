@@ -20,7 +20,8 @@ from diamaneos_tools import flash_all  # noqa: E402
 TEST = pathlib.Path(__file__).resolve().parent
 FIRMWARE = [('abl_a', 'abl.elf'), ('abl_b', 'abl.elf'), ('logfs', 'logfs_ufs_8mb.bin'), ('storsec', 'storsec.mbn')]
 IMAGES = ['abl.elf', 'logfs_ufs_8mb.bin', 'storsec.mbn', 'modemst1.img', 'modemst2.img', 'boot.img',
-          'super.img', 'system.img', 'vendor.img', 'frp.img', 'metadata.img', 'misc.img', 'userdata.img']
+          'super.img', 'super_empty.img', 'system.img', 'vendor.img', 'frp.img', 'metadata.img', 'misc.img',
+          'userdata.img']
 KEY = b'fixture AVB public key\n'
 
 

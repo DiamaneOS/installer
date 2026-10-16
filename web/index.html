@@ -132,6 +132,9 @@
                 DiamaneOS to slot a, then empty data partitions. Leave the phone alone until it is
                 finished.</p>
 
+                <p>For the system partitions the phone restarts into fastbootd, then back into Fastboot
+                Mode. After each restart the browser may ask you to choose the phone again.</p>
+
                 <p>An image set that can be locked also installs its signing key, and the phone returns to
                 Fastboot Mode for the lock. Any other set restarts into DiamaneOS.</p>
 
@@ -146,26 +149,6 @@
                     <br/>
                     <progress id="install-progress" hidden="" max="1" value="0"></progress>
                 </p>
-
-                <div id="fallback" hidden="">
-                    <p>The bootloader stopped answering while it wrote super. The phone will not start until
-                    the install is finished, and fastbootd can finish it:</p>
-
-                    <ol>
-                        <li>Hold Power and Volume down until the phone restarts into Fastboot Mode.</li>
-                        <li>Press Continue in fastbootd. The phone switches to fastbootd and gets each system
-                        partition there. Then it returns to the bootloader for the last steps.</li>
-                        <li>After each restart, the browser may ask you to choose the phone again.</li>
-                    </ol>
-
-                    <button id="fallback-button" disabled="">Continue in fastbootd</button>
-
-                    <p id="fallback-status-container" hidden="">
-                        <strong id="fallback-status"></strong>
-                        <br/>
-                        <progress id="fallback-progress" hidden="" max="1" value="0"></progress>
-                    </p>
-                </div>
 
                 <button id="reconnect-button" hidden="">Connect again</button>
             </section>
