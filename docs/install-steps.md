@@ -52,9 +52,11 @@ from the bootloader, which can stall while it writes it.
 
 ## Differences that remain
 
-- **Unlocking and locking:** `flash-all.sh` never unlocks or locks. It prints the lock command for
-  a set with a key. The web installer has buttons for both, with the checks in
-  [web installer](web-installer.md#locking). Neither ever locks the critical partitions.
+- **Unlocking and locking:** `flash-all.sh` never unlocks or locks. For a set with a key it prints
+  the stock relock order: `flashing lock_critical`, back to the bootloader without starting Android,
+  `flashing get_unlock_ability` reporting 1, then `flashing lock`.
+  - The web installer has buttons for both and locks in that order, with the checks in
+    [web installer](web-installer.md#locking).
 - **Files:** the web installer needs only the files it uses, not `target-files.zip` or `otatools.zip`.
 - **Empty super layout:** `fastboot wipe-super` writes the metadata of `super_empty.img` from the
   computer. The web installer uploads the file and sends `update-super:super:wipe`, as `fastboot

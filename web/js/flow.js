@@ -8,9 +8,11 @@ import {
 // How long the phone may leave a USB transfer unanswered before the installer
 // takes the bootloader for dead. A part of a large image takes about 20 seconds
 // to send, with transfers every few ms. Other commands answer within seconds.
-// Unlocking and locking may wait for the user's choice on the phone. After the
+// Unlocking and locking may wait for the user's choice on the phone. After a
 // lock the phone may start Android instead of returning to the bootloader.
 export const SECONDS = { flash: 60, command: 30, confirm: 300, back: 120 };
+
+const CONFIRM_LOCK = "On the phone, choose to lock with the volume buttons and press Power.";
 
 export class PhoneError extends Error {
     constructor(message) {
@@ -346,9 +348,48 @@ export class Flow {
             && this.#installed.usb === this.#device.device && this.#device.isConnected;
     }
 
-    // Locks the bootloader straight after the install of a set with a key. Never
-    // the critical partitions. Resolves to the phone's state after the lock, or to
-    // null if it started Android instead of returning to the bootloader.
+    // What the phone must report before each lock: the set's product, the
+    // bootloader unlocked, its critical lock state, and that it allows unlocking.
+    async #lockable(record) {
+        const state = await this.state();
+        if (state.product !== record.product || state.userspace === "yes" || state.unlocked !== "yes") {
+            throw new PhoneError("The phone is not in Fastboot Mode with an unlocked bootloader. Install again, "
+                + "then lock.");
+        }
+        if (state.critical === null) {
+            throw new PhoneError("The bootloader did not report its lock state.");
+        }
+        if (state.ability !== 1) {
+            throw new PhoneError("The phone does not allow unlocking, so it could not be unlocked again if it "
+                + "failed to start. Do not lock it.");
+        }
+        return state;
+    }
+
+    // Android must not start between the two locks, so the phone has to come
+    // back to the bootloader. Otherwise the bootloader stays unlocked.
+    async #lockCritical(record) {
+        await this.#lockCommand("flashing lock_critical");
+        const back = await this.#ui.reconnect(`Locking the critical partitions first. ${CONFIRM_LOCK} It erases all `
+            + `data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode. Android must `
+            + "not start before the bootloader is locked.", this.#seconds.confirm, this.#seconds.back);
+        if (back !== true) {
+            throw new PhoneError((back === false
+                ? "The phone did not restart, so the lock of the critical partitions was not confirmed."
+                : "The phone did not return to Fastboot Mode in time, or it started Android.")
+                + ` The installer did not lock the bootloader. ${restartHint(record.product)} Then install again `
+                + "and lock straight after.");
+        }
+        if ((await this.#lockable(record)).critical) {
+            throw new PhoneError("The critical partitions are still unlocked, so the installer did not lock the "
+                + "bootloader. Install again, then lock.");
+        }
+    }
+
+    // Locks a set with a key straight after its install, in the stock order: the
+    // critical partitions, back to the bootloader, then the bootloader. Resolves to
+    // the phone's state after the lock, or to null if it started Android instead
+    // of returning to the bootloader.
     async lock(pkg) {
         const record = pkg.record;
         if (!lockAllowed(record)) {
@@ -358,21 +399,16 @@ export class Flow {
             throw new PhoneError("Lock only straight after the install, while the phone stays in Fastboot Mode. "
                 + "Install again, then lock.");
         }
-        const state = await this.state();
-        if (state.product !== record.product || state.userspace === "yes" || state.unlocked !== "yes") {
-            throw new PhoneError("The phone is not in Fastboot Mode with an unlocked bootloader. Install again, "
-                + "then lock.");
-        }
-        if (state.ability !== 1) {
-            throw new PhoneError("The phone does not allow unlocking, so it could not be unlocked again if it "
-                + "failed to start. Do not lock it.");
-        }
+        const state = await this.#lockable(record);
         // One lock per install, also when this one is refused or not confirmed.
         this.#installed = null;
+        if (state.critical) {
+            await this.#lockCritical(record);
+        }
         await this.#lockCommand("flashing lock");
-        const back = await this.#ui.reconnect("Confirm on the phone with the volume and power buttons. It erases "
-            + `all data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode for the check.`,
-            this.#seconds.confirm, this.#seconds.back);
+        const back = await this.#ui.reconnect(`${state.critical ? "Now the bootloader. " : ""}${CONFIRM_LOCK} It `
+            + `erases all data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode for `
+            + "the check.", this.#seconds.confirm, this.#seconds.back);
         if (back === false) {
             throw new PhoneError("The phone did not restart, so the lock was not confirmed. "
                 + `${restartHint(record.product)} Then press Connect.`);

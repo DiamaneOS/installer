@@ -194,7 +194,8 @@
                     <li>Locking erases all data on the phone.</li>
                     <li>Each start then shows a yellow warning screen with the ID of the key the OS is signed
                     with. This is expected: DiamaneOS boots with its own key, not the device maker's.</li>
-                    <li>The installer locks only the bootloader, never the critical partitions.</li>
+                    <li>The installer locks the critical partitions first, then the bootloader. This is the
+                    device maker's order.</li>
                     <li>It never locks an image set that must stay unlocked, such as one signed with public
                     test keys. Anyone can sign images with those keys.</li>
                     <li>It locks only while the phone allows unlocking, so that a phone that fails to start
@@ -205,13 +206,21 @@
                     <li>Leave the phone in Fastboot Mode after the install. Do not start Android.</li>
                     <li>Press Lock bootloader. The installer checks that the bootloader is still unlocked and
                     that the phone allows unlocking.</li>
-                    <li>Confirm on the phone with the volume and power buttons. The phone erases all data and
-                    restarts.</li>
-                    <li>Use the bootloader keys while it restarts, so that it returns to Fastboot Mode. The
-                    installer then checks that the bootloader is locked. Choose Start on the phone.</li>
+                    <li>It locks the critical partitions. On the phone, choose to lock with the volume buttons
+                    and press Power. The phone erases all data and restarts.</li>
+                    <li>Use the bootloader keys while it restarts, so that it returns to Fastboot Mode. Android
+                    must not start before the bootloader is locked. If the phone does not return, the installer
+                    stops and leaves the bootloader unlocked.</li>
+                    <li>Once the phone is back, the installer checks again that it allows unlocking. Then it
+                    locks the bootloader. Confirm on the phone the same way and return to Fastboot Mode
+                    again.</li>
+                    <li>The installer then checks that the bootloader is locked. Choose Start on the phone.</li>
                     <li>The last setup screen offers to turn OEM unlocking off, and that choice is selected.
                     Keep it. Turn it on again only to unlock the bootloader.</li>
                 </ol>
+
+                <p>If the critical partitions are already locked, the installer only locks the
+                bootloader.</p>
 
                 <button id="lock-button" disabled="">Lock bootloader</button>
 
