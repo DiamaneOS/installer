@@ -139,6 +139,7 @@ fastbootd instead.
 | `stock.html` | Returning to the device maker's stock OS and locking it there |
 | `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
 | `js/package.js` | The supported devices (`DEVICES`). Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
+| `js/site-links.js` | On the staging host, points the website links at the staging website |
 | `js/release.js` | The release download: the channel file, the factory ZIP, its signature and its files |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js`, `js/sha512.js` | SHA-256 and SHA-512 of large files in workers |
