@@ -229,8 +229,11 @@ export class Flow {
                 await this.#call(() => this.#device.upload("super", data), this.#seconds.flash);
                 await this.#command("update-super:super:wipe");
             } else if (step.op === "set-active") {
-                this.#ui.progress(`Selecting slot ${step.slot} ${count}`, done / total);
+                this.#ui.progress(`Selecting and checking slot ${step.slot} ${count}`, done / total);
                 await this.#command(`set_active:${step.slot}`);
+                this.#ui.log("fastboot getvar current-slot");
+                await this.#expect("current-slot", step.slot,
+                    `The phone did not confirm slot ${step.slot}. The install stopped before restarting.`);
             } else if (step.op === "reboot-fastboot") {
                 this.#ui.progress(`Starting fastbootd ${count}`, done / total);
                 await this.#command(step.op);

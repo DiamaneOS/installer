@@ -25,8 +25,18 @@ function fixtureFiles(name, changes = {}) {
     return files;
 }
 
-async function fixturePackage(name) {
+// slot: the set's slot. For b, build.json and flash-all.sh are changed to match.
+async function fixturePackage(name, slot = "a") {
     const files = fixtureFiles(name);
+    if (slot !== "a") {
+        const record = JSON.parse(await files.get("build.json").text());
+        record.flash.slot = slot;
+        const names = [...record.flash.bootloader, ...record.flash.logical].join("|");
+        const lines = new RegExp(`^(fastboot --set-active=|checkslot |fastboot flash (?:${names})_)a\\b`, "gm");
+        const script = (await files.get(SCRIPT).text()).replace(lines, `$1${slot}`);
+        files.set("build.json", new Blob([JSON.stringify(record)]));
+        files.set(SCRIPT, new Blob([script]));
+    }
     return { ...(await readPackage(files)), files };
 }
 
@@ -44,6 +54,9 @@ class FakeDevice {
         this.unlocked = "yes";
         this.ability = 1;
         this.snapshot = "none";
+        this.slot = "a";
+        this.slotAtFastboot = null;
+        this.responses = new Map();
         this.sent = [];
         // What flash-all.sh would show: flashes, slot changes and restarts.
         this.events = [];
@@ -72,9 +85,20 @@ class FakeDevice {
         this.device.stalled = this.stall(text, this);
         await this.device.transferOut();
         await this.device.transferIn();
+        if (this.responses.has(text)) {
+            const response = this.responses.get(text);
+            if (response instanceof Error) {
+                throw response;
+            }
+            return { text: response };
+        }
         if (text.startsWith("set_active:")) {
-            this.events.push(`fastboot --set-active=${text.slice("set_active:".length)}`);
+            this.slot = text.slice("set_active:".length);
+            this.events.push(`fastboot --set-active=${this.slot}`);
         } else if (text.startsWith("reboot")) {
+            if (text === "reboot-fastboot") {
+                this.slotAtFastboot = this.slot;
+            }
             this.events.push(text === "reboot-fastboot" ? "fastboot reboot fastboot" : `fastboot ${text}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
         } else if (text === "snapshot-update:cancel") {
@@ -86,7 +110,7 @@ class FakeDevice {
             this.locking = true;
         }
         const values = { product: this.product, unlocked: this.unlocked, "is-userspace": this.mode === "fastbootd" ? "yes" : "no",
-            "snapshot-update-status": this.snapshot };
+            "snapshot-update-status": this.snapshot, "current-slot": this.slot };
         const replies = {
             "oem device-info": `Device unlocked: ${this.unlocked === "yes"}\nDevice critical unlocked: true\n`,
             "flashing get_unlock_ability": `get_unlock_ability: ${this.ability}\n`,
@@ -171,6 +195,9 @@ test("a set whose files or flash-all.sh disagree is refused", async () => {
         await assert.rejects(readPackage(fixtureFiles(name, changes)), (error) =>
             error instanceof PackageError && error.message.includes(message));
     }
+    const legacy = script.replace("fastboot --set-active=a\ncheckslot a\nfastboot reboot fastboot\n",
+        "fastboot reboot fastboot\n");
+    await assert.rejects(readPackage(fixtureFiles("fixture", { [SCRIPT]: legacy })), /lists other steps/);
     const files = fixtureFiles("fixture");
     files.delete("vendor.img");
     await assert.rejects(readPackage(files), /vendor.img is missing/);
@@ -215,6 +242,68 @@ test("the logical partitions are written in fastbootd, everything else in the bo
         const back = fake.sent.lastIndexOf("reboot-bootloader", fake.sent.indexOf("flash:frp"));
         assert.deepEqual(fake.sent.slice(back + 1, back + 4), ["getvar:product", "getvar:is-userspace",
             "getvar:unlocked"], name);
+    }
+});
+
+test("the set's slot is selected and confirmed before fastbootd and at the end", async () => {
+    for (const name of FIXTURES) {
+        for (const slot of ["a", "b"]) {
+            const pkg = await fixturePackage(name, slot);
+            const fake = new FakeDevice();
+            fake.slot = slot === "a" ? "b" : "a";
+            await new Flow(fake, restarting(fake)).install(pkg);
+            const enter = fake.sent.indexOf("reboot-fastboot");
+            assert.equal(fake.slotAtFastboot, slot);
+            assert.deepEqual(fake.sent.slice(enter - 2, enter + 1), [`set_active:${slot}`, "getvar:current-slot",
+                "reboot-fastboot"]);
+            const last = fake.sent.lastIndexOf(`set_active:${slot}`);
+            assert.deepEqual(fake.sent.slice(last, last + 3), [`set_active:${slot}`, "getvar:current-slot",
+                name === "fixture-relock" ? "reboot-bootloader" : "reboot"]);
+            for (const partition of [...pkg.record.flash.bootloader, ...pkg.record.flash.logical]) {
+                assert.ok(fake.sent.includes(`flash:${partition}_${slot}`), `${name} ${partition}_${slot}`);
+            }
+        }
+    }
+});
+
+test("a slot the phone does not confirm stops the install before the next restart", async () => {
+    const refused = () => Object.assign(new Error("refused"), { name: "FastbootError", status: "FAIL" });
+    const failures = {
+        "selection refused": ["set_active:b", refused()],
+        "query refused": ["getvar:current-slot", refused()],
+        "other slot": ["getvar:current-slot", "a"],
+        "two slots": ["getvar:current-slot", "b\na"],
+    };
+    for (const end of [false, true]) {
+        for (const [why, [text, response]] of Object.entries(failures)) {
+            const pkg = await fixturePackage("fixture-relock", "b");
+            const fake = new FakeDevice();
+            const responses = new Map([[text, response]]);
+            // At the end: only once the phone is back from fastbootd.
+            fake.responses = end ? new Map() : responses;
+            const flow = new Flow(fake, { ...ui, reconnect: async () => {
+                fake.reconnected();
+                if (fake.mode === "bootloader") {
+                    fake.responses = responses;
+                }
+                return true;
+            } });
+            await assert.rejects(flow.install(pkg), (error) => error instanceof PhoneError || error === response,
+                why);
+            assert.equal(fake.sent.at(-1), text, why);
+            assert.deepEqual(fake.sent.filter((line) => line.startsWith("reboot")),
+                end ? ["reboot-fastboot", "reboot-bootloader"] : [], why);
+            assert.equal(flow.lockReady(pkg), false);
+        }
+    }
+});
+
+test("only an exact a or b target slot is admitted", async () => {
+    const record = JSON.parse(readFileSync(new URL("./fixture/build.json", import.meta.url), "utf8"));
+    for (const slot of ["a\n", "b\r", "a\nb", "", "A", null, ["a"]]) {
+        const changed = { ...record, flash: { ...record.flash, slot } };
+        await assert.rejects(readPackage(fixtureFiles("fixture", { "build.json": JSON.stringify(changed) })),
+            (error) => error instanceof PackageError && error.message.includes("not an image set record"));
     }
 });
 

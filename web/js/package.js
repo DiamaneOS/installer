@@ -137,7 +137,8 @@ export function installSteps(record) {
         steps.push(flash(`${name}_${slot}`, `${name}.img`));
     }
     if (record.flash.logical.length > 0) {
-        steps.push({ op: "reboot-fastboot" }, { op: "wipe-super", file: SUPER_EMPTY });
+        // fastbootd starts from recovery on the active slot, which must be the one just written.
+        steps.push({ op: "set-active", slot }, { op: "reboot-fastboot" }, { op: "wipe-super", file: SUPER_EMPTY });
         for (const name of record.flash.logical) {
             steps.push(flash(`${name}_${slot}`, `${name}.img`));
         }
@@ -177,7 +178,8 @@ export function parseSums(text) {
 
 function checkRecord(record) {
     const ok = record !== null && typeof record === "object" && record.schema_version === 1
-        && typeof record.product === "string" && record.flash && /^[ab]$/.test(record.flash.slot)
+        && typeof record.product === "string" && record.flash
+        && (record.flash.slot === "a" || record.flash.slot === "b")
         && Array.isArray(record.flash.bootloader) && Array.isArray(record.flash.logical)
         && record.wipe && record.wipe.images && typeof record.wipe.images === "object"
         && (!writesFirmware(record) || (Array.isArray(record.firmware.steps)
