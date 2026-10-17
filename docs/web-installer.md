@@ -40,16 +40,25 @@ A set may be locked when `build.json` has `never_lock: false` and names a key in
 
 1. Is offered only on the connection the install ended on. A restart or a disconnect after the
    install ends the offer, because Android might have started. Another install starts it again.
-2. Checks that the phone reports the set's product, is in the bootloader, still unlocked, and that
-   `flashing get_unlock_ability` reports 1.
-3. Sends `fastboot flashing lock`, once, after the user's click. The user confirms on the phone.
-4. Waits for the phone to restart. If it comes back to Fastboot Mode, the installer checks that
+2. Checks that the phone reports the set's product, is in the bootloader, still unlocked, reports
+   its critical lock state, and that `flashing get_unlock_ability` reports 1.
+3. Sends `fastboot flashing lock_critical`, once, after the user's click. The user confirms on the
+   phone and holds the key `DEVICES` names while it restarts.
+4. Waits for the phone to come back to the bootloader, with the Connect again button. If it is not
+   back within two minutes, for example because Android started, the installer stops and leaves the
+   bootloader unlocked.
+5. Checks the phone again as in step 2, and that the critical partitions are now locked.
+6. Sends `fastboot flashing lock`, once. The user confirms on the phone.
+7. Waits for the phone to restart. If it comes back to Fastboot Mode, the installer checks that
    `getvar unlocked` reports `no`.
-5. If the phone starts Android instead, the installer says how to read the warning screen: yellow
+8. If the phone starts Android instead, the installer says how to read the warning screen: yellow
    when locked, orange when still unlocked.
 
-The installer never sends `flashing lock_critical`, and never locks a set with `never_lock: true`.
-The gate is the record, not the name of the signing keys.
+- This is the stock relock order, which `flash-all.sh` prints. Android must not start between the
+  two locks.
+- When the critical partitions are already locked, steps 3 to 5 are skipped.
+- The installer never locks a set with `never_lock: true`. The gate is the record, not the name of
+  the signing keys.
 
 ## When the phone stops answering
 

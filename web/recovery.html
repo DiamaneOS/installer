@@ -110,6 +110,11 @@
                 <ul>
                     <li>If the bootloader is still unlocked, the phone works unlocked. To lock it, install
                     again and lock straight after.</li>
+                    <li>If the phone did not return to Fastboot Mode after the critical partitions were
+                    locked, the bootloader stays unlocked. Restart the phone into Fastboot Mode with its
+                    bootloader keys.</li>
+                    <li>An install that writes firmware then asks to unlock the critical partitions
+                    first.</li>
                     <li>If the bootloader refused the lock, do not repeat it. Ask for help.</li>
                     <li>Never lock a phone that does not allow unlocking. If it then failed to start, it could
                     not be unlocked again.</li>

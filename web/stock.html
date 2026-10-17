@@ -77,9 +77,13 @@
                     Android starts, turn the phone off and start it in Fastboot Mode.</li>
                 </ol>
 
-                <p>The critical partitions are still unlocked from the install. <code>fastboot oem
-                device-info</code> must show <code>Device unlocked: true</code> and <code>Device critical
-                unlocked: true</code>.</p>
+                <p>A locked DiamaneOS has its critical partitions locked too. If <code>fastboot oem
+                device-info</code> shows <code>Device critical unlocked: false</code>, run <code>fastboot
+                flashing unlock_critical</code> or press Unlock critical partitions on the installer page.
+                Confirm on the phone and return to Fastboot Mode the same way.</p>
+
+                <p><code>fastboot oem device-info</code> must then show <code>Device unlocked: true</code> and
+                <code>Device critical unlocked: true</code>.</p>
             </section>
 
             <section id="installing">
@@ -123,8 +127,8 @@
                     under Settings > System > Developer options.</li>
                 </ol>
 
-                <p>This is the device maker's order: the critical partitions first, then the bootloader. Never use
-                <code>fastboot flashing lock_critical</code> with DiamaneOS.</p>
+                <p>This is the device maker's order: the critical partitions first, then the bootloader. The
+                installer locks DiamaneOS in the same order.</p>
             </section>
         </main>
 
