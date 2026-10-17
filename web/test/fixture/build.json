@@ -1,5 +1,10 @@
 {
   "build_id": "fixture",
+  "device": {
+    "bootloader_keys": "Power and Volume down",
+    "maker": "Fairphone",
+    "name": "Fairphone 6"
+  },
   "firmware": {
     "images": {
       "abl.elf": "f7a8842268ab2ea09df4686051e54e5fb344d8dc43401468b8f592588ec0486b",

@@ -35,7 +35,7 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 ## Locking
 
 A set may be locked when `build.json` has `never_lock: false` and names a key in
-`avb_custom_key`. Its install ends with `flash avb_custom_key`, `--set-active=a` and
+`avb_custom_key`. Its install ends with `flash avb_custom_key`, the checked slot and
 `reboot-bootloader`, so the phone waits in the bootloader. **Lock bootloader** then:
 
 1. Is offered only on the connection the install ended on. A restart or a disconnect after the
@@ -70,9 +70,10 @@ fastbootd instead.
 
 - Before the boot images it cancels an update the OS left pending, if `getvar
   snapshot-update-status` reports one.
-- After the boot images the installer runs `reboot-fastboot`. Once the phone is back, it checks that
-  it is in fastbootd and is the same product.
-- It writes the empty layout from `super_empty.img`, then each logical partition to slot a.
+- After the boot images the installer selects `flash.slot` and checks that `getvar current-slot`
+  reports exactly that slot. Then it runs `reboot-fastboot`.
+- Once the phone is back, it checks that it is in fastbootd and is the same product.
+- It writes the empty layout from `super_empty.img`, then each logical partition to `flash.slot`.
 - It runs `reboot-bootloader` and checks the product, the bootloader and the unlock state again
   before the data images.
 - fastbootd is a new USB device to the browser, so the user may have to choose the phone again.

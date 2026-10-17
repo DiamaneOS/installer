@@ -23,6 +23,8 @@ IMAGES = ['abl.elf', 'logfs_ufs_8mb.bin', 'storsec.mbn', 'modemst1.img', 'modems
           'super.img', 'super_empty.img', 'system.img', 'vendor.img', 'frp.img', 'metadata.img', 'misc.img',
           'userdata.img']
 KEY = b'fixture AVB public key\n'
+# The build profile's device block, which build.json carries and the scripts' texts name.
+DEVICE = {'name': 'Fairphone 6', 'maker': 'Fairphone', 'bootloader_keys': 'Power and Volume down'}
 
 
 def vbmeta(key):
@@ -44,7 +46,7 @@ def write(out, extra, files):
         sums[name] = hashlib.sha256(data).hexdigest()
     entry = lambda name: {'file': name, 'sha256': sums[name]}  # noqa: E731
     record = {
-        'schema_version': 1, 'build_id': 'fixture', 'product': 'FP6', 'release': False,
+        'schema_version': 1, 'build_id': 'fixture', 'product': 'FP6', 'device': DEVICE, 'release': False,
         'flash': {'slot': 'a', 'bootloader': ['boot', 'vbmeta'], 'logical': ['system', 'vendor']},
         'wipe': {'images': {name: entry(f'{name}.img') for name in ('userdata', 'metadata', 'frp', 'misc')}},
         'firmware': {

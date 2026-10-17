@@ -1,5 +1,5 @@
 {
-  "tools": "4cb5cc66a4bdbd8e89c46d277dfd09a1646a6f6d",
+  "tools": "79c2af242cfae7d0c868e9a8df2f5e6ba1197309",
   "fixture": [
     ["flash", "abl_a", "abl.elf"],
     ["flash", "abl_b", "abl.elf"],
@@ -10,6 +10,7 @@
     ["snapshot-update", "cancel"],
     ["flash", "boot_a", "boot.img"],
     ["flash", "vbmeta_a", "vbmeta.img"],
+    ["--set-active=a"],
     ["reboot", "fastboot"],
     ["wipe-super", "super_empty.img"],
     ["flash", "system_a", "system.img"],
@@ -32,6 +33,7 @@
     ["snapshot-update", "cancel"],
     ["flash", "boot_a", "boot.img"],
     ["flash", "vbmeta_a", "vbmeta.img"],
+    ["--set-active=a"],
     ["reboot", "fastboot"],
     ["wipe-super", "super_empty.img"],
     ["flash", "system_a", "system.img"],

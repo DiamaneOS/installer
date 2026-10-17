@@ -12,14 +12,17 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 3. When `flash.logical` is not empty: `snapshot-update cancel`, only if `getvar
    snapshot-update-status` reports something other than `none`, as `fastboot flashall` and
    fastboot.js do.
-4. `flash.bootloader` to slot a: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw, vbmeta_system
-   and vbmeta.
-5. When `flash.logical` is not empty: `reboot fastboot`, then in fastbootd `wipe-super
-   super_empty.img` and each logical partition to slot a, in that order, then `reboot-bootloader`.
+4. `flash.bootloader` to `flash.slot`: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw,
+   vbmeta_system and vbmeta.
+5. When `flash.logical` is not empty: select `flash.slot` and check it, then `reboot fastboot`. In
+   fastbootd: `wipe-super super_empty.img`, each logical partition to that slot, then
+   `reboot-bootloader`.
 6. `wipe.images` in key order: frp, metadata, misc and userdata.
 7. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
-   `--set-active=a`, then `reboot-bootloader`. The phone waits in the bootloader for the lock.
-8. Otherwise `--set-active=a`, then `reboot`. A set with `never_lock: true` never gets a key.
+   select and check the slot, then `reboot-bootloader`. The phone waits in the bootloader for the
+   lock.
+8. Otherwise select and check the slot, then `reboot`. A set with `never_lock: true` never gets a
+   key.
 
 Recovery, which holds fastbootd, is among the boot images in step 4. Nothing writes `super.img`
 from the bootloader, which can stall while it writes it.
@@ -39,6 +42,9 @@ from the bootloader, which can stall while it writes it.
 
 ## Between the bootloader and fastbootd
 
+- Each `--set-active=<slot>` is followed by `getvar current-slot`. `flash-all.sh` and the web
+  installer go on only when it reports exactly that slot.
+- A refused selection, a failed query or any other reply stops the install before the next restart.
 - `flash-all.sh` waits until `getvar is-userspace` reports the new mode. It stops after 90 answers
   from the old mode, two seconds apart.
 - The web installer waits for the phone to leave and come back, then checks the mode, the product
