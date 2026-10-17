@@ -139,19 +139,18 @@ fastbootd instead.
 | `stock.html` | Returning to the device maker's stock OS and locking it there |
 | `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
 | `js/package.js` | The supported devices (`DEVICES`). Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
-| `js/site-links.js` | On the staging host, points the website links at the staging website |
 | `js/release.js` | The release download: the channel file, the factory ZIP, its signature and its files |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js`, `js/sha512.js` | SHA-256 and SHA-512 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
-| `nginx/` | The security headers, and an example server for the installer's own host |
+| `nginx/` | The security headers, and the website locations that serve the installer |
 | `serve.py` | A local server for tests, with the same headers |
 | `test/` | Node tests, and fixtures made with the tools' `flash_all.py`: two image sets and a signed release |
 
 ## Security headers
 
-`nginx/base.conf` goes on every response. `nginx/installer.conf` goes on the installer page and
-`nginx/general.conf` on every other file. They follow GrapheneOS's headers, with these differences:
+`nginx/base.conf` goes on every installer response. `nginx/installer.conf` goes on the installer page
+and `nginx/general.conf` on every other installer file. They follow GrapheneOS's headers, with these differences:
 
 - `connect-src` allows only `https://releases.diamaneos.de`, for the release download.
 - `worker-src 'self'` instead of `child-src 'self'`, for the hash workers.
@@ -159,7 +158,7 @@ fastbootd instead.
 - HSTS as the website sends it: with subdomains, without preload.
 - `clipboard-write` for the installer page, for the log's Copy button.
 
-No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes the server.
+No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes how the website serves it.
 
 ## Testing locally
 

@@ -653,19 +653,16 @@ test("every page gets its font from its own origin, which both policies allow", 
     }
 });
 
-test("staging pages link the staging website, production pages the live one", async () => {
+test("the pages link the website on their own origin and the links inside them resolve", () => {
     const web = new URL("../", import.meta.url);
     for (const name of ["index.html", "recovery.html", "stock.html"]) {
-        assert.match(readFileSync(new URL(name, web), "utf8"), /<script type="module" src="js\/site-links\.js"><\/script>/);
+        const page = readFileSync(new URL(name, web), "utf8");
+        const ids = new Set([...page.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+        for (const [, href] of page.matchAll(/<a\b[^>]*\bhref="([^"]*)"/g)) {
+            assert.doesNotMatch(href, /^https?:\/\/([a-z.]+\.)?diamaneos\.de/, `${name}: ${href}`);
+            if (href.startsWith("#")) assert.ok(ids.has(href.slice(1)), `${name}: ${href}`);
+        }
+        assert.deepEqual([...page.matchAll(/<script\b[^>]*src="([^"]+)"/g)].map((m) => m[1]),
+            name === "index.html" ? ["js/fastboot/ffe7e270/fastboot.min.mjs", "js/install.js"] : []);
     }
-    const code = readFileSync(new URL("js/site-links.js", web), "utf8");
-    const run = (hostname) => {
-        const links = [{ href: "https://diamaneos.de/install/", getAttribute() { return this.href; } },
-            { href: "https://github.com/DiamaneOS", getAttribute() { return this.href; } }];
-        const document = { querySelectorAll: () => links.filter((l) => l.href.startsWith("https://diamaneos.de/")) };
-        new Function("location", "document", code)({ hostname }, document);
-        return links.map((l) => l.href);
-    };
-    assert.deepEqual(run("install.diamaneos.de"), ["https://diamaneos.de/install/", "https://github.com/DiamaneOS"]);
-    assert.deepEqual(run("install.staging.diamaneos.de"), ["https://staging.diamaneos.de/install/", "https://github.com/DiamaneOS"]);
 });

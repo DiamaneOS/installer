@@ -9,7 +9,7 @@ Installation and recovery tools and documentation for DiamaneOS.
   allows that.
   - A [page for failed installs](web/recovery.html) and a guide for
     [returning to the stock OS](web/stock.html).
-  - [Hosting](docs/hosting.md): the host name, headers and deploy steps it needs.
+  - [Hosting](docs/hosting.md): how the website serves it at `/install/web/`, and the headers it needs.
 - [Install steps](docs/install-steps.md): how the web installer and the image set's `flash-all.sh`
   match, and how to keep them in step.
 

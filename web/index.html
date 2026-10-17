@@ -3,10 +3,10 @@
     <head>
         <meta charset="utf-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <title>Web installer | DiamaneOS</title>
+        <title>Web installer · DiamaneOS</title>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
         <link rel="preload" href="fonts/SofiaSans-latin-wght.woff2" as="font" type="font/woff2" crossorigin=""/>
         <link rel="stylesheet" href="style.css"/>
-        <script type="module" src="js/site-links.js"></script>
         <script type="module" src="js/fastboot/ffe7e270/fastboot.min.mjs" integrity="sha256-/TM74wkIOUV1rXRSGlzJPb4ZjBA52fzUW3aSypxxtwc="></script>
         <script type="module" src="js/install.js"></script>
         <meta name="description" content="Install DiamaneOS from a browser over USB."/>
@@ -21,7 +21,7 @@
 
         <header class="site-header">
             <div class="wrap header-in">
-                <a class="brand" href="https://diamaneos.de/" rel="noreferrer" aria-label="DiamaneOS website"><svg viewBox="0 0 655.396 98.25" class="lockup" aria-hidden="true" focusable="false">
+                <a class="brand" href="/" aria-label="DiamaneOS home"><svg viewBox="0 0 655.396 98.25" class="lockup" aria-hidden="true" focusable="false">
                     <path class="b-bond" d="M71.9 21.642L85.504 26.453L99.108 16.833L99.108 76.608L85.504 71.797L71.9 81.417Z"/>
                     <path class="b-sheet" d="M42.751 0L85.504 15.116L106.878 0L128.255 7.558L128.255 30.232L106.878 22.674L85.504 37.788L42.751 22.674Z"/>
                     <path class="b-sheet" d="M0 75.576L21.377 60.462L64.128 75.576L85.504 60.462L128.255 75.576L128.255 98.25L85.504 83.134L64.128 98.25L21.377 83.134L0 98.25Z"/>
@@ -30,14 +30,14 @@
                 </svg></a>
                 <nav class="nav" aria-label="Main">
                     <ul>
-                        <li><a href="https://diamaneos.de/features/" rel="noreferrer">Features</a></li>
-                        <li><a href="https://diamaneos.de/limitations/" rel="noreferrer">Limitations</a></li>
-                        <li><a href="https://diamaneos.de/devices/" rel="noreferrer">Devices</a></li>
-                        <li><a href="https://diamaneos.de/install/" rel="noreferrer">Install</a></li>
-                        <li><a href="https://diamaneos.de/documentation/" rel="noreferrer">Docs</a></li>
-                        <li><a href="https://diamaneos.de/faq/" rel="noreferrer">FAQ</a></li>
-                        <li><a href="https://diamaneos.de/security/" rel="noreferrer">Security</a></li>
-                        <li><a href="https://diamaneos.de/about/" rel="noreferrer">About</a></li>
+                        <li><a href="/features/">Features</a></li>
+                        <li><a href="/limitations/">Limitations</a></li>
+                        <li><a href="/devices/">Devices</a></li>
+                        <li><a href="/install/">Install</a></li>
+                        <li><a href="/documentation/">Docs</a></li>
+                        <li><a href="/faq/">FAQ</a></li>
+                        <li><a href="/security/">Security</a></li>
+                        <li><a href="/about/">About</a></li>
                     </ul>
                 </nav>
             </div>
@@ -46,43 +46,45 @@
         <main id="web-install" tabindex="-1">
             <h1><a href="#web-install">Web installer</a></h1>
 
-            <p>This page installs DiamaneOS on a
-            <a href="https://diamaneos.de/devices/" rel="noreferrer">supported device</a> over USB.
-            It downloads the release from <code>releases.diamaneos.de</code>, or reads an image set from this
+            <p>This page installs DiamaneOS on a <a href="/devices/">supported device</a> over USB. It
+            downloads the release from <code>releases.diamaneos.de</code>, or reads an image set from this
             computer. It sends nothing about the phone over the network.</p>
 
-            <p>It runs the same steps as the image set's <code>flash-all.sh</code>. If an install fails,
-            see <a href="recovery.html">what to do</a>. To leave DiamaneOS, see
-            <a href="stock.html">returning to the stock OS</a>. While a phone is
-            connected, the browser asks before leaving this page.</p>
+            <p>It runs the same steps as the image set's <code>flash-all.sh</code>, which the
+            <a href="/install/cli/">command-line installation</a> uses, and checks every file before it writes
+            anything. While a phone is connected, the browser asks before leaving this page.</p>
 
             <nav id="table-of-contents" class="toc">
                 <h2><a href="#table-of-contents">Table of contents</a></h2>
 
                 <ul>
-                    <li><a href="#prerequisites">Prerequisites</a></li>
-                    <li><a href="#allowing-unlocking">Allowing unlocking</a></li>
-                    <li><a href="#connecting">Connecting the phone</a></li>
-                    <li><a href="#unlocking">Unlocking the bootloader</a></li>
-                    <li><a href="#image-set">Getting the image set</a></li>
-                    <li><a href="#installing">Installing</a></li>
-                    <li><a href="#locking">Locking the bootloader</a></li>
-                    <li><a href="#stock">Returning to the stock OS</a></li>
+                    <li><a href="#before-you-start">Before you start</a></li>
+                    <li><a href="#enabling-oem-unlocking">Enabling OEM unlocking</a></li>
+                    <li><a href="#booting-into-the-bootloader">Booting into the bootloader</a></li>
+                    <li><a href="#connecting-the-phone">Connecting the phone</a></li>
+                    <li><a href="#unlocking-the-bootloader">Unlocking the bootloader</a></li>
+                    <li><a href="#getting-the-image-set">Getting the image set</a></li>
+                    <li><a href="#installing-diamaneos">Installing DiamaneOS</a></li>
+                    <li><a href="#locking-the-bootloader">Locking the bootloader</a></li>
+                    <li><a href="#disabling-oem-unlocking">Disabling OEM unlocking</a></li>
+                    <li><a href="#if-a-step-fails">If a step fails</a></li>
+                    <li><a href="#returning-to-the-stock-os">Returning to the stock OS</a></li>
                     <li><a href="#log-section">Log</a></li>
                 </ul>
             </nav>
 
-            <section id="prerequisites">
-                <h2><a href="#prerequisites">Prerequisites</a></h2>
+            <section id="before-you-start">
+                <h2><a href="#before-you-start">Before you start</a></h2>
 
                 <ul>
+                    <li>A <a href="/devices/">supported device</a> whose bootloader can be unlocked.</li>
                     <li>A Chromium-based browser, such as Chrome, Chromium or Edge. Other browsers have no
                     WebUSB.</li>
-                    <li>At least 2 GB of free memory.</li>
-                    <li>Free disk space for the release download and its unpacked files, or the image set
-                    unpacked into a folder.</li>
-                    <li>A good USB-C cable, plugged straight into the computer rather than into a hub.</li>
-                    <li>Only this phone connected to the computer over USB.</li>
+                    <li>At least 2 GB of free memory, and free disk space for the release download and its
+                    unpacked files, or the image set unpacked into a folder.</li>
+                    <li>A USB-C data cable, plugged straight into the computer rather than into a hub. Connect no
+                    other phone.</li>
+                    <li>A backup of your data. Unlocking, installing and locking each erase the phone.</li>
                     <li>On Linux, the udev rules for Android devices: <code>android-sdk-platform-tools-common</code>
                     on Debian and Ubuntu, <code>android-udev</code> on Arch Linux.</li>
                     <li>On Linux, stop fwupd, which can take over the phone's USB connection:
@@ -90,49 +92,66 @@
                 </ul>
             </section>
 
-            <section id="allowing-unlocking">
-                <h2><a href="#allowing-unlocking">Allowing unlocking</a></h2>
+            <section id="enabling-oem-unlocking">
+                <h2><a href="#enabling-oem-unlocking">Enabling OEM unlocking</a></h2>
 
-                <p>In Android on the phone, turn on OEM unlocking in Developer options, as the device maker
-                describes. The <a href="https://diamaneos.de/devices/" rel="noreferrer">supported
-                devices</a> page links its guide. The phone checks online first.</p>
+                <p>In the stock OS on the phone:</p>
 
-                <p>Note the build number in Settings > About phone. The install writes the device maker's
-                firmware that the image set carries, and the phone must not already run a newer stock
-                release.</p>
+                <ol>
+                    <li>Open Settings > About phone and tap Build number seven times. This turns on Developer
+                    options.</li>
+                    <li>Open Settings > System > Developer options and turn on OEM unlocking. The phone needs an
+                    internet connection for this.</li>
+                    <li>Note the build number under Settings > About phone. The install writes the device maker's
+                    firmware that the image set carries, and the phone must not already run a newer stock
+                    release.</li>
+                </ol>
+
+                <p>OEM unlocking allows the bootloader to be unlocked. It does not unlock it.</p>
             </section>
 
-            <section id="connecting">
-                <h2><a href="#connecting">Connecting the phone</a></h2>
+            <section id="booting-into-the-bootloader">
+                <h2><a href="#booting-into-the-bootloader">Booting into the bootloader</a></h2>
 
-                <p>Turn the phone off and start it in Fastboot Mode with its bootloader keys, which the
-                <a href="https://diamaneos.de/devices/" rel="noreferrer">supported devices</a> page
-                lists. Connect it to this computer and press Connect.</p>
+                <p>Turn the phone off. Hold its bootloader keys, which the <a href="/devices/">supported
+                devices</a> page lists, until the bootloader screen appears. This page calls that screen
+                Fastboot Mode.</p>
+            </section>
 
-                <p>After each restart the installer reconnects on its own. If it asks, press Connect again and
-                choose the phone. Steps the phone reports as done are greyed out.</p>
+            <section id="connecting-the-phone">
+                <h2><a href="#connecting-the-phone">Connecting the phone</a></h2>
+
+                <p>Connect the phone to this computer, press Connect and choose the phone in the browser's
+                dialog. The installer shows whether the bootloader and the critical partitions are unlocked,
+                and whether unlocking is allowed.</p>
+
+                <p>The phone restarts several times. After each restart the installer reconnects on its own.
+                If it asks, press Connect again and choose the phone. Steps the phone reports as done are
+                greyed out.</p>
 
                 <button id="connect-button" disabled="">Connect</button>
 
                 <p><strong id="connect-status"></strong></p>
             </section>
 
-            <section id="unlocking">
-                <h2><a href="#unlocking">Unlocking the bootloader</a></h2>
+            <section id="unlocking-the-bootloader">
+                <h2><a href="#unlocking-the-bootloader">Unlocking the bootloader</a></h2>
 
                 <p>The install writes firmware, so the phone needs two unlocks: the bootloader, then its
                 critical partitions. Each one erases all data on the phone.</p>
 
                 <ol>
-                    <li>Press Unlock bootloader. On the phone, choose to unlock with the volume buttons and
-                    press Power.</li>
-                    <li>The phone erases itself and restarts. Use the bootloader keys while it restarts, so
+                    <li>Press Unlock bootloader. On the phone, select the unlock choice with the volume buttons
+                    and confirm with the power button.</li>
+                    <li>The phone erases itself and restarts. Hold its bootloader keys while it restarts, so
                     that it returns to Fastboot Mode before Android starts.</li>
-                    <li>If Android starts, turn the phone off. Then start it in Fastboot Mode and press
-                    Connect.</li>
                     <li>Once the installer shows the phone back in Fastboot Mode, press Unlock critical
                     partitions and confirm on the phone the same way. Return to Fastboot Mode again.</li>
                 </ol>
+
+                <p>Android must not start between the two unlocks. Its first start turns OEM unlocking off, and
+                the critical partitions can then not be unlocked. If Android starts, turn the phone off, start
+                it in Fastboot Mode and press Connect.</p>
 
                 <button id="unlock-button" disabled="">Unlock bootloader</button>
 
@@ -143,8 +162,8 @@
                 <p><strong id="unlock-critical-status"></strong></p>
             </section>
 
-            <section id="image-set">
-                <h2><a href="#image-set">Getting the image set</a></h2>
+            <section id="getting-the-image-set">
+                <h2><a href="#getting-the-image-set">Getting the image set</a></h2>
 
                 <p>Download release gets the latest stable release for the connected phone. Before anything
                 reads it, the installer checks its signature with DiamaneOS's factory key. Then it checks every
@@ -179,10 +198,11 @@
                 <p id="package-summary"></p>
             </section>
 
-            <section id="installing">
-                <h2><a href="#installing">Installing</a></h2>
+            <section id="installing-diamaneos">
+                <h2><a href="#installing-diamaneos">Installing DiamaneOS</a></h2>
 
-                <p>The install erases all data on the phone. Leave the phone alone until it is finished.</p>
+                <p>The install erases all data on the phone. Do not touch the phone or the cable, and keep this
+                page open, until the installer reports the end.</p>
 
                 <ol>
                     <li>In Fastboot Mode it writes the device maker's firmware to both slots. It cancels a
@@ -192,10 +212,16 @@
                     system partitions.</li>
                     <li>The phone returns to Fastboot Mode for the empty data partitions.</li>
                     <li>An image set that can be locked also installs its signing key, and the phone restarts
-                    into Fastboot Mode for the lock. Any other set restarts into DiamaneOS.</li>
+                    into Fastboot Mode for the lock. Do not start Android, and lock straight away. Any other set
+                    restarts into DiamaneOS.</li>
                 </ol>
 
-                <p>The browser may ask to choose the phone again when it starts fastbootd.</p>
+                <p>fastbootd is a new USB device to the browser. If the installer shows Connect again, wait
+                until the phone shows fastbootd, press it and choose the phone. Press it too if the phone is
+                back in Fastboot Mode and the installer does not go on.</p>
+
+                <p>The installer names the firmware release the image set carries. Compare it with the build
+                number you noted. If the phone runs a newer stock release, do not install.</p>
 
                 <p id="firmware-check" hidden=""><label><input type="checkbox" id="firmware-confirm"/> The
                 phone does not run a newer stock release than
@@ -212,8 +238,8 @@
                 <button id="reconnect-button" hidden="">Connect again</button>
             </section>
 
-            <section id="locking">
-                <h2><a href="#locking">Locking the bootloader</a></h2>
+            <section id="locking-the-bootloader">
+                <h2><a href="#locking-the-bootloader">Locking the bootloader</a></h2>
 
                 <p id="lock-notice">Get the image set first.</p>
 
@@ -226,8 +252,9 @@
                     <li><strong>Stop if something fails.</strong> Do not repeat a lock command after an
                     error.</li>
                     <li>Locking erases all data on the phone.</li>
-                    <li>Each start then shows a yellow warning screen with the ID of the key the OS is signed
-                    with. This is expected: DiamaneOS boots with its own key, not the device maker's.</li>
+                    <li>The installer offers the lock only straight after its install, while the phone stays
+                    connected. If the phone restarts or is unplugged in between, install again and lock straight
+                    after.</li>
                     <li>The critical partitions are locked first, then the bootloader. This is the device
                     maker's order.</li>
                     <li>The installer never locks an image set that must stay unlocked, such as one signed with
@@ -241,16 +268,13 @@
                     <li>Press Lock critical partitions. The installer checks that the bootloader is still
                     unlocked and that the phone allows unlocking. On the phone, choose to lock with the volume
                     buttons and press Power. The phone erases all data and restarts.</li>
-                    <li>Use the bootloader keys while it restarts, so that it returns to Fastboot Mode. Android
+                    <li>Hold the bootloader keys while it restarts, so that it returns to Fastboot Mode. Android
                     must not start before the bootloader is locked. If the phone does not return, the installer
                     stops and leaves the bootloader unlocked.</li>
                     <li>Once the phone is back, the installer checks that the critical partitions are locked and
                     that the phone still allows unlocking. Then press Lock bootloader and confirm on the phone
                     the same way.</li>
-                    <li>The phone erases all data and starts DiamaneOS with the yellow warning screen. An orange
-                    one means the bootloader is still unlocked.</li>
-                    <li>The last setup screen offers to turn OEM unlocking off, and that choice is selected.
-                    Keep it. Turn it on again only to unlock the bootloader.</li>
+                    <li>The phone erases all data and starts DiamaneOS.</li>
                 </ol>
 
                 <p>If the critical partitions are already locked, only Lock bootloader is offered.</p>
@@ -262,10 +286,31 @@
                 <button id="lock-button" disabled="">Lock bootloader</button>
 
                 <p><strong id="lock-status"></strong></p>
+
+                <p>From then on, each start shows a yellow warning screen with the ID of the key the OS is signed
+                with. This is expected: DiamaneOS boots with its own key, not the device maker's. An orange
+                warning screen means the bootloader is still unlocked. Start the phone in Fastboot Mode,
+                install again and lock straight after.</p>
             </section>
 
-            <section id="stock">
-                <h2><a href="#stock">Returning to the stock OS</a></h2>
+            <section id="disabling-oem-unlocking">
+                <h2><a href="#disabling-oem-unlocking">Disabling OEM unlocking</a></h2>
+
+                <p>The last setup screen offers to turn OEM unlocking off, and that choice is selected. Keep it.
+                With OEM unlocking off, the bootloader refuses to unlock. Turn it on again only to unlock the
+                bootloader, for example to return to the stock OS.</p>
+            </section>
+
+            <section id="if-a-step-fails">
+                <h2><a href="#if-a-step-fails">If a step fails</a></h2>
+
+                <p>The installer shows the error and a link to <a href="recovery.html">what to do</a>, which
+                covers each case. Do not start Android, and never lock the bootloader to fix a failed install.
+                Add the log below when you <a href="/install/#getting-help">ask for help</a>.</p>
+            </section>
+
+            <section id="returning-to-the-stock-os">
+                <h2><a href="#returning-to-the-stock-os">Returning to the stock OS</a></h2>
 
                 <p>See <a href="stock.html">returning to the stock OS</a>. It
                 installs the device maker's stock OS, then removes the DiamaneOS key before the lock.</p>
@@ -292,10 +337,10 @@
             <div class="wrap">
                 <nav aria-label="Footer">
                     <ul class="footer-links">
-                        <li><a href="https://diamaneos.de/about/#contact" rel="noreferrer">Contact</a></li>
-                        <li><a href="https://diamaneos.de/legal/#impressum" rel="noreferrer">Impressum</a></li>
-                        <li><a href="https://diamaneos.de/legal/#privacy" rel="noreferrer">Privacy</a></li>
-                        <li><a href="https://diamaneos.de/security/" rel="noreferrer">Report a vulnerability</a></li>
+                        <li><a href="/about/#contact">Contact</a></li>
+                        <li><a href="/legal/#impressum">Impressum</a></li>
+                        <li><a href="/legal/#privacy">Privacy</a></li>
+                        <li><a href="/security/">Report a vulnerability</a></li>
                         <li><a href="https://github.com/DiamaneOS/installer" rel="noreferrer">Source code on GitHub</a></li>
                     </ul>
                 </nav>

@@ -1,20 +1,26 @@
 # Hosting the web installer
 
-The installer needs a host name of its own, for example `install.diamaneos.de`.
+The installer is served at `https://diamaneos.de/install/web/`, as GrapheneOS serves its installer at
+`grapheneos.org/install/web`. The page carries its own guide text.
 
-- The website's Content-Security-Policy allows no scripts, and the installer is a script.
-- A separate origin keeps the browser's USB permission for the phone away from the website.
+- The rest of the website runs no scripts and its Permissions-Policy turns USB off, so only the
+  installer page can use the browser's USB permission for the origin.
 - WebUSB works only over HTTPS, or on localhost for tests.
 
-## What the host needs
+## How the website takes it
 
-- **DNS:** A and AAAA records for the name, pointing at the web server. If the zone has CAA
-  records, they must allow the certificate's issuer.
-- **TLS:** a certificate for the name, for example from Let's Encrypt through the HTTP-01 webroot
-  the example server answers on port 80.
-- **nginx:** the server in [`web/nginx/example.conf`](../web/nginx/example.conf), with `base.conf`,
-  `installer.conf` and `general.conf` copied to `installer/` in the nginx configuration directory.
-- **Keepalive:** the HTTPS server keeps connections open (`keepalive_requests 64`,
+- The website repository holds `web/` without `nginx/`, `test/` and `serve.py` at
+  `static/install/web/`, and this repository's three header files under `server/nginx/`.
+- `installer.sha256` there names the installer commit and the SHA-256 of every file. The website's
+  build check fails if a file differs or one is missing or added.
+- A new installer version is a new website commit: import the signed installer commit, build, check
+  and deploy the website.
+
+## What the server needs
+
+- **nginx:** the locations in [`web/nginx/example.conf`](../web/nginx/example.conf) in the
+  website's HTTPS server, with `base.conf`, `installer.conf` and `general.conf`.
+- **Keepalive:** the website server keeps connections open (`keepalive_requests 64`,
   `keepalive_timeout 15s`). With the hardened http block's `keepalive_timeout 0`, each HTTP/2
   connection ends after one request and browsers give up on some of the page's modules.
 - **Files only:** no server code, no cookies, no request logs. The page loads nothing from other
@@ -27,10 +33,11 @@ The installer needs a host name of its own, for example `install.diamaneos.de`.
   `https://releases.diamaneos.de`.
 - Its Permissions-Policy allows `usb`, `screen-wake-lock` and `clipboard-write` for its own origin
   and nothing else.
-- Every other file gets `general.conf`: the same sources without workers, no USB and no Trusted
-  Types policy.
-- Every response gets `base.conf`: HSTS, `nosniff`, no referrer, same-origin COOP, COEP and CORP,
-  and no framing.
+- Every other installer file gets `general.conf`: the same sources without workers, no USB and no
+  Trusted Types policy.
+- Every installer response gets `base.conf`: HSTS, `nosniff`, no referrer, same-origin COOP, COEP
+  and CORP, and no framing.
+- The website's own headers do not apply under `/install/web/`.
 - `.mjs` files must be served as `text/javascript`, or the browser refuses fastboot.js.
 
 ## The release host
@@ -38,19 +45,12 @@ The installer needs a host name of its own, for example `install.diamaneos.de`.
 The release download fetches from `releases.diamaneos.de` in CORS mode, without cookies.
 
 - The channel files (`/FP6-stable`), the factory ZIPs and their `.sig` files need
-  `Access-Control-Allow-Origin: *`, or the installer's origin.
+  `Access-Control-Allow-Origin: *`, or the website's origin.
 - The requests are plain GETs, so there is no preflight and no other CORS header is needed.
 - `Cross-Origin-Resource-Policy: same-origin` may stay. Browsers check it only for requests without
   CORS.
 
-## Deploying
+## Checking a deployment
 
-1. Take a signed commit of this repository and check its signature.
-2. Copy `web/` without `nginx/`, `test/` and `serve.py` into a new read-only directory named after
-   the commit, for example `/srv/diamaneos-installer/releases/<commit>`.
-3. Install the server and the header files. Test the nginx configuration as the user nginx runs as,
-   not as root, then reload nginx.
-4. Point `/srv/diamaneos-installer/current` at the new directory. Keep the previous one for a
-   rollback.
-5. Fetch every file from the public name, compare its SHA-256 with the commit's file, and check the
-   headers of `/`, `/index.html` and one script.
+Fetch every file under `/install/web/`, compare its SHA-256 with the commit's file, and check the
+headers of `/install/web/`, one script and one website page.

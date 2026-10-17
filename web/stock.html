@@ -3,10 +3,10 @@
     <head>
         <meta charset="utf-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <title>Returning to the stock OS | DiamaneOS</title>
+        <title>Returning to the stock OS · DiamaneOS</title>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
         <link rel="preload" href="fonts/SofiaSans-latin-wght.woff2" as="font" type="font/woff2" crossorigin=""/>
         <link rel="stylesheet" href="style.css"/>
-        <script type="module" src="js/site-links.js"></script>
         <meta name="description" content="How to replace DiamaneOS with the device maker's stock OS and lock the bootloader on it."/>
         <meta name="color-scheme" content="dark light"/>
         <meta name="theme-color" content="#f6f3ef" media="(prefers-color-scheme: light)"/>
@@ -19,7 +19,7 @@
 
         <header class="site-header">
             <div class="wrap header-in">
-                <a class="brand" href="https://diamaneos.de/" rel="noreferrer" aria-label="DiamaneOS website"><svg viewBox="0 0 655.396 98.25" class="lockup" aria-hidden="true" focusable="false">
+                <a class="brand" href="/" aria-label="DiamaneOS home"><svg viewBox="0 0 655.396 98.25" class="lockup" aria-hidden="true" focusable="false">
                     <path class="b-bond" d="M71.9 21.642L85.504 26.453L99.108 16.833L99.108 76.608L85.504 71.797L71.9 81.417Z"/>
                     <path class="b-sheet" d="M42.751 0L85.504 15.116L106.878 0L128.255 7.558L128.255 30.232L106.878 22.674L85.504 37.788L42.751 22.674Z"/>
                     <path class="b-sheet" d="M0 75.576L21.377 60.462L64.128 75.576L85.504 60.462L128.255 75.576L128.255 98.25L85.504 83.134L64.128 98.25L21.377 83.134L0 98.25Z"/>
@@ -28,14 +28,14 @@
                 </svg></a>
                 <nav class="nav" aria-label="Main">
                     <ul>
-                        <li><a href="https://diamaneos.de/features/" rel="noreferrer">Features</a></li>
-                        <li><a href="https://diamaneos.de/limitations/" rel="noreferrer">Limitations</a></li>
-                        <li><a href="https://diamaneos.de/devices/" rel="noreferrer">Devices</a></li>
-                        <li><a href="https://diamaneos.de/install/" rel="noreferrer">Install</a></li>
-                        <li><a href="https://diamaneos.de/documentation/" rel="noreferrer">Docs</a></li>
-                        <li><a href="https://diamaneos.de/faq/" rel="noreferrer">FAQ</a></li>
-                        <li><a href="https://diamaneos.de/security/" rel="noreferrer">Security</a></li>
-                        <li><a href="https://diamaneos.de/about/" rel="noreferrer">About</a></li>
+                        <li><a href="/features/">Features</a></li>
+                        <li><a href="/limitations/">Limitations</a></li>
+                        <li><a href="/devices/">Devices</a></li>
+                        <li><a href="/install/">Install</a></li>
+                        <li><a href="/documentation/">Docs</a></li>
+                        <li><a href="/faq/">FAQ</a></li>
+                        <li><a href="/security/">Security</a></li>
+                        <li><a href="/about/">About</a></li>
                     </ul>
                 </nav>
             </div>
@@ -45,11 +45,11 @@
             <h1><a href="#stock">Returning to the stock OS</a></h1>
 
             <p>This replaces DiamaneOS with the device maker's stock OS and erases all data. The notes for
-            each device on the <a href="https://diamaneos.de/devices/" rel="noreferrer">supported devices</a>
+            each device on the <a href="/devices/">supported devices</a>
             page link the device maker's factory images and install guide. It
             uses <code>fastboot</code> from Google's
             <a href="https://developer.android.com/tools/releases/platform-tools" rel="noreferrer">Android SDK
-            Platform-Tools</a>. Back to the <a href="index.html">web installer</a>.</p>
+            Platform-Tools</a>. Back to the <a href="./">web installer</a>.</p>
 
             <ul>
                 <li>Run each command on its own and read its result before the next.</li>
@@ -84,7 +84,7 @@
                     <li>Turn on OEM unlocking under Settings > System > Developer options.</li>
                     <li>Turn the phone off and start it in Fastboot Mode with its bootloader keys.</li>
                     <li>Run <code>fastboot flashing unlock</code>, or press Unlock bootloader on the
-                    <a href="index.html#unlocking">installer page</a>. Confirm on the phone. This erases all
+                    <a href="./#unlocking-the-bootloader">installer page</a>. Confirm on the phone. This erases all
                     data.</li>
                     <li>Use the bootloader keys while it restarts, so that it returns to Fastboot Mode. If
                     Android starts, turn the phone off and start it in Fastboot Mode.</li>
@@ -109,7 +109,7 @@
                     <li>Install the stock OS with the device maker's flash script from the factory image, as
                     its guide describes. The phone must then stay in Fastboot Mode instead of starting Android.
                     The notes for your device on the
-                    <a href="https://diamaneos.de/devices/" rel="noreferrer">supported devices</a> page say how,
+                    <a href="/devices/">supported devices</a> page say how,
                     and what to do if the install stops.</li>
                     <li>Do not start Android yet. Its first start on an unlocked phone turns OEM unlocking off,
                     and the bootloader can then no longer be locked safely.</li>
@@ -149,10 +149,10 @@
             <div class="wrap">
                 <nav aria-label="Footer">
                     <ul class="footer-links">
-                        <li><a href="https://diamaneos.de/about/#contact" rel="noreferrer">Contact</a></li>
-                        <li><a href="https://diamaneos.de/legal/#impressum" rel="noreferrer">Impressum</a></li>
-                        <li><a href="https://diamaneos.de/legal/#privacy" rel="noreferrer">Privacy</a></li>
-                        <li><a href="https://diamaneos.de/security/" rel="noreferrer">Report a vulnerability</a></li>
+                        <li><a href="/about/#contact">Contact</a></li>
+                        <li><a href="/legal/#impressum">Impressum</a></li>
+                        <li><a href="/legal/#privacy">Privacy</a></li>
+                        <li><a href="/security/">Report a vulnerability</a></li>
                         <li><a href="https://github.com/DiamaneOS/installer" rel="noreferrer">Source code on GitHub</a></li>
                     </ul>
                 </nav>
