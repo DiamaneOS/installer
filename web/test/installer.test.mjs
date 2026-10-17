@@ -614,7 +614,7 @@ test("a release download is used only once its signature by the factory key chec
     }
 });
 
-test("the page may connect only to the release host, and its links leave a running install open", () => {
+test("the page may connect only to the release host, and leaving it asks while a phone is connected", () => {
     const web = new URL("../", import.meta.url);
     const conf = readFileSync(new URL("nginx/installer.conf", web), "utf8");
     const csp = conf.match(/Content-Security-Policy "([^"]+)"/)[1];
@@ -623,7 +623,10 @@ test("the page may connect only to the release host, and its links leave a runni
     const links = [...page.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]).filter((tag) => !/href="#/.test(tag)
         && !tag.includes('class="skip"'));
     assert.ok(links.length > 10);
-    assert.deepEqual(links.filter((tag) => !tag.includes('target="_blank"')), []);
+    // Links open in this tab. The browser's own question guards a connected phone or a failed step.
+    assert.deepEqual(links.filter((tag) => tag.includes('target="_blank"')), []);
+    const script = readFileSync(new URL("js/install.js", web), "utf8");
+    assert.match(script, /if \(busy \|\| failed \|\| device\.isConnected\) \{\s*event\.preventDefault\(\);/);
 });
 
 test("an AVB footer moves to the end of a larger partition, as fastboot does", async () => {

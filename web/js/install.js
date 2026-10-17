@@ -68,6 +68,8 @@ function setButtonState({ id, enabled }) {
 }
 
 let busy = false;
+// The last action ended with an error. Leaving would lose its log and status.
+let failed = false;
 let pkg = null;
 let setStatus = () => {};
 // The status line of the running action, where "Connect again" appears.
@@ -270,12 +272,9 @@ async function lock() {
         + "unlocked.";
 }
 
-// In a new tab, so that the page of a running install stays open.
 function recoveryLink(statusField) {
     const link = document.createElement("a");
     link.href = "recovery.html";
-    link.target = "_blank";
-    link.rel = "noopener";
     link.textContent = "What to do now";
     statusField.append(" ", link);
 }
@@ -310,6 +309,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
         waitingNote = "";
         refresh();
         try {
+            failed = false;
             let finalStatus = await callback(statusCallback);
             if (finalStatus !== undefined) {
                 statusCallback(finalStatus);
@@ -322,6 +322,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
                 // sometimes non-error objects are thrown
                 errorMessage = String(error);
             }
+            failed = true;
             log(`Error: ${errorMessage}`);
             statusCallback(`Error: ${errorMessage}`);
             statusField.className = "error-text";
@@ -540,9 +541,9 @@ if ("usb" in navigator) {
     }
 }
 
-// This will create an alert box to stop the user from leaving the page during actions
+// The browser asks before leaving while a phone is connected, an action runs or the last one failed.
 window.addEventListener("beforeunload", event => {
-    if (busy) {
+    if (busy || failed || device.isConnected) {
         event.preventDefault();
         event.returnValue = "";
     }
