@@ -137,8 +137,10 @@ export function installSteps(record) {
         steps.push(flash(`${name}_${slot}`, `${name}.img`));
     }
     if (record.flash.logical.length > 0) {
+        // An unlock leaves an erase request in misc, which recovery would run instead of fastbootd.
         // fastbootd starts from recovery on the active slot, which must be the one just written.
-        steps.push({ op: "set-active", slot }, { op: "reboot-fastboot" }, { op: "wipe-super", file: SUPER_EMPTY });
+        steps.push(flash("misc", record.wipe.images.misc.file), { op: "set-active", slot }, { op: "reboot-fastboot" },
+            { op: "wipe-super", file: SUPER_EMPTY });
         for (const name of record.flash.logical) {
             steps.push(flash(`${name}_${slot}`, `${name}.img`));
         }
@@ -182,6 +184,7 @@ function checkRecord(record) {
         && (record.flash.slot === "a" || record.flash.slot === "b")
         && Array.isArray(record.flash.bootloader) && Array.isArray(record.flash.logical)
         && record.wipe && record.wipe.images && typeof record.wipe.images === "object"
+        && (record.flash.logical.length === 0 || typeof record.wipe.images.misc?.file === "string")
         && (!writesFirmware(record) || (Array.isArray(record.firmware.steps)
             && record.firmware.reset && typeof record.firmware.reset === "object"));
     if (!ok) {

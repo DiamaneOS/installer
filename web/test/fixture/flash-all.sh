@@ -38,6 +38,7 @@ fastboot snapshot-update cancel
 fi
 fastboot flash boot_a boot.img
 fastboot flash vbmeta_a vbmeta.img
+fastboot flash misc misc.img
 fastboot --set-active=a
 checkslot a
 fastboot reboot fastboot
