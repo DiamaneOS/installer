@@ -29,9 +29,11 @@ export class StallError extends Error {
 }
 
 // device: a fastboot.js FastbootDevice. ui: connect(), reconnect(message,
-// seconds, back) resolving to false if the phone did not leave in time and null
-// if it did not come back in time, progress(text, fraction), waiting(seconds or
-// null) and log(line).
+// seconds, back, choose) resolving to false if the phone did not leave in time
+// and null if it did not come back in time, leave(message, seconds) resolving
+// to whether it left, progress(text, fraction), waiting(seconds or null) and
+// log(line). choose: the phone comes back as another USB device, which the
+// browser may ask the user to choose.
 export class Flow {
     #device;
     #ui;
@@ -40,8 +42,10 @@ export class Flow {
     // The USB device whose bootloader stopped answering. The installer never
     // closes it: a reply cut short leaves the bootloader unable to answer.
     #dead = null;
-    // The set installed on this connection, until it is locked.
+    // The set installed on this connection and the lock it takes next, "critical" or "bootloader".
     #installed = null;
+    // The phone's last state, on the USB device it was read from.
+    #known = null;
     // The product the phone or the image set last named, for the restart hint.
     #product = null;
 
@@ -149,8 +153,8 @@ export class Flow {
         }
     }
 
-    async #restart(message, seconds) {
-        if (!(await this.#ui.reconnect(message, seconds))) {
+    async #restart(message, choose = false) {
+        if (!(await this.#ui.reconnect(message, undefined, undefined, choose))) {
             throw new PhoneError(`The phone did not restart. ${restartHint(this.#product)} Then press Connect.`);
         }
     }
@@ -174,7 +178,14 @@ export class Flow {
                 }
             }
         }
-        return { product, userspace, unlocked, critical, ability };
+        const state = { product, userspace, unlocked, critical, ability };
+        this.#known = { state, usb: this.#device.device };
+        return state;
+    }
+
+    // The state last read on this connection, or null.
+    known() {
+        return this.#device.isConnected && this.#known?.usb === this.#device.device ? this.#known.state : null;
     }
 
     async #bootloaderChecks(record, critical) {
@@ -239,7 +250,7 @@ export class Flow {
             } else if (step.op === "reboot-fastboot") {
                 this.#ui.progress(`Starting fastbootd ${count}`, done / total);
                 await this.#command(step.op);
-                await this.#restart("The phone is starting fastbootd.");
+                await this.#restart("The phone is starting fastbootd.", true);
                 await this.#expect("is-userspace", "yes",
                     "The phone did not start fastbootd. Restart it into Fastboot Mode and install again.");
                 await this.#expect("product", record.product, checks(record)[0].message);
@@ -269,7 +280,7 @@ export class Flow {
         if (state.product !== pkg.record.product || state.userspace === "yes" || state.unlocked !== "yes") {
             throw new PhoneError("The phone did not return to Fastboot Mode unlocked.");
         }
-        this.#installed = { pkg, usb: this.#device.device };
+        this.#installed = { pkg, usb: this.#device.device, step: state.critical ? "critical" : "bootloader" };
         return state;
     }
 
@@ -311,16 +322,18 @@ export class Flow {
         }
     }
 
+    // Resolves to the phone's state once it is back in Fastboot Mode, or to null
+    // if it did not come back in time, for example because Android started.
     async unlock(critical) {
         const state = await this.#checkedState();
         if (!critical && state.unlocked === "yes") {
-            return "The bootloader is already unlocked.";
+            return state;
         }
         if (critical && state.unlocked !== "yes") {
             throw new PhoneError("Unlock the bootloader first.");
         }
         if (critical && state.critical) {
-            return "The critical partitions are already unlocked.";
+            return state;
         }
         if (state.ability !== 1) {
             throw new PhoneError(critical
@@ -328,24 +341,45 @@ export class Flow {
                 : "The phone does not allow unlocking. Turn on OEM unlocking in Developer options and start again.");
         }
         await this.#lockCommand(critical ? "flashing unlock_critical" : "flashing unlock");
-        return "Confirm on the phone. It erases the phone and restarts. Then bring it back to Fastboot Mode and "
-            + "press Connect.";
+        const back = await this.#ui.reconnect("Confirm on the phone: choose to unlock with the volume buttons and "
+            + `press Power. It erases all data and restarts. ${bootHint(state.product)}, so that it returns to `
+            + "Fastboot Mode before Android starts.", this.#seconds.confirm, this.#seconds.back);
+        if (back === false) {
+            throw new PhoneError("The phone did not restart, so the unlock was not confirmed.");
+        }
+        return back === null ? null : await this.state();
     }
 
     // The phone left. Whatever restarted it, it may have started Android.
-    // Returns whether that ends the chance to lock after the install.
+    // Returns the lock this ends the chance for, or null.
     lost(usb) {
         if (this.#installed?.usb !== usb) {
-            return false;
+            return null;
         }
+        const step = this.#installed.step;
         this.#installed = null;
-        return true;
+        return step;
     }
 
     // Whether the set was installed on this connection and may be locked now.
     lockReady(pkg) {
         return this.#installed !== null && this.#installed.pkg === pkg
             && this.#installed.usb === this.#device.device && this.#device.isConnected;
+    }
+
+    // The lock the installed set takes next on this connection: "critical", "bootloader" or null.
+    lockStep(pkg) {
+        return this.lockReady(pkg) ? this.#installed.step : null;
+    }
+
+    #lockStart(pkg, step) {
+        if (!lockAllowed(pkg.record)) {
+            throw new PhoneError(pkg.record.notice || "This image set must stay on an unlocked phone.");
+        }
+        if (this.lockStep(pkg) !== step) {
+            throw new PhoneError("Lock only straight after the install, while the phone stays in Fastboot Mode. "
+                + "Install again, then lock.");
+        }
     }
 
     // What the phone must report before each lock: the set's product, the
@@ -366,62 +400,54 @@ export class Flow {
         return state;
     }
 
-    // Android must not start between the two locks, so the phone has to come
-    // back to the bootloader. Otherwise the bootloader stays unlocked.
-    async #lockCritical(record) {
-        await this.#lockCommand("flashing lock_critical");
-        const back = await this.#ui.reconnect(`Locking the critical partitions first. ${CONFIRM_LOCK} It erases all `
-            + `data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode. Android must `
-            + "not start before the bootloader is locked.", this.#seconds.confirm, this.#seconds.back);
-        if (back !== true) {
-            throw new PhoneError((back === false
-                ? "The phone did not restart, so the lock of the critical partitions was not confirmed."
-                : "The phone did not return to Fastboot Mode in time, or it started Android.")
-                + ` The installer did not lock the bootloader. ${restartHint(record.product)} Then install again `
-                + "and lock straight after.");
-        }
-        if ((await this.#lockable(record)).critical) {
-            throw new PhoneError("The critical partitions are still unlocked, so the installer did not lock the "
-                + "bootloader. Install again, then lock.");
-        }
-    }
-
-    // Locks a set with a key straight after its install, in the stock order: the
-    // critical partitions, back to the bootloader, then the bootloader. Resolves to
-    // the phone's state after the lock, or to null if it started Android instead
-    // of returning to the bootloader.
-    async lock(pkg) {
+    // The first of the stock relock order's two locks. Android must not start
+    // between them, so the phone has to come back to the bootloader. Otherwise
+    // the bootloader stays unlocked. Resolves to the phone's state once it is back.
+    async lockCritical(pkg) {
+        this.#lockStart(pkg, "critical");
         const record = pkg.record;
-        if (!lockAllowed(record)) {
-            throw new PhoneError(record.notice || "This image set must stay on an unlocked phone.");
-        }
-        if (!this.lockReady(pkg)) {
-            throw new PhoneError("Lock only straight after the install, while the phone stays in Fastboot Mode. "
-                + "Install again, then lock.");
-        }
         const state = await this.#lockable(record);
         // One lock per install, also when this one is refused or not confirmed.
         this.#installed = null;
         if (state.critical) {
-            await this.#lockCritical(record);
+            await this.#lockCommand("flashing lock_critical");
+            const back = await this.#ui.reconnect(`${CONFIRM_LOCK} It erases all data and restarts. `
+                + `${bootHint(record.product)}, so that it returns to Fastboot Mode. Android must not start before `
+                + "the bootloader is locked.", this.#seconds.confirm, this.#seconds.back);
+            if (back !== true) {
+                throw new PhoneError((back === false
+                    ? "The phone did not restart, so the lock of the critical partitions was not confirmed."
+                    : "The phone did not return to Fastboot Mode in time, or it started Android.")
+                    + ` The installer did not lock the bootloader. ${restartHint(record.product)} Then install `
+                    + "again and lock straight after.");
+            }
         }
-        await this.#lockCommand("flashing lock");
-        const back = await this.#ui.reconnect(`${state.critical ? "Now the bootloader. " : ""}${CONFIRM_LOCK} It `
-            + `erases all data and restarts. ${bootHint(record.product)}, so that it returns to Fastboot Mode for `
-            + "the check.", this.#seconds.confirm, this.#seconds.back);
-        if (back === false) {
-            throw new PhoneError("The phone did not restart, so the lock was not confirmed. "
-                + `${restartHint(record.product)} Then press Connect.`);
+        const after = await this.#lockable(record);
+        if (after.critical) {
+            throw new PhoneError("The critical partitions are still unlocked, so the installer did not lock the "
+                + "bootloader. Install again, then lock.");
         }
-        if (back === null) {
-            return null;
-        }
-        const after = await this.state();
-        if (after.unlocked !== "no") {
-            throw new PhoneError("The bootloader is still unlocked. The phone works unlocked. To lock it, install "
-                + "again and lock straight after.");
-        }
+        this.#installed = { pkg, usb: this.#device.device, step: "bootloader" };
         return after;
+    }
+
+    // The last lock, once the critical partitions are locked. The phone then
+    // erases itself and starts the OS, as after GrapheneOS's installer. The
+    // warning screen at each start shows whether the bootloader is locked.
+    async lock(pkg) {
+        this.#lockStart(pkg, "bootloader");
+        const state = await this.#lockable(pkg.record);
+        if (state.critical) {
+            throw new PhoneError("The critical partitions are unlocked. Install again, then lock.");
+        }
+        this.#installed = null;
+        await this.#lockCommand("flashing lock");
+        const left = await this.#ui.leave(`${CONFIRM_LOCK} It erases all data and starts DiamaneOS.`,
+            this.#seconds.confirm);
+        if (!left) {
+            throw new PhoneError("The phone did not restart, so the lock was not confirmed. The bootloader stays "
+                + "unlocked. To lock it, install again and lock straight after.");
+        }
     }
 }
 

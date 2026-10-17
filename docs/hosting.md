@@ -25,7 +25,8 @@ The installer needs a host name of its own, for example `install.diamaneos.de`.
 - The installer page gets `installer.conf`: scripts, styles, fonts, images and workers from its
   own origin only, Trusted Types with the one `installer` policy, and `connect-src` only for
   `https://releases.diamaneos.de`.
-- Its Permissions-Policy allows `usb` and `screen-wake-lock` for its own origin and nothing else.
+- Its Permissions-Policy allows `usb`, `screen-wake-lock` and `clipboard-write` for its own origin
+  and nothing else.
 - Every other file gets `general.conf`: the same sources without workers, no USB and no Trusted
   Types policy.
 - Every response gets `base.conf`: HSTS, `nosniff`, no referrer, same-origin COOP, COEP and CORP,

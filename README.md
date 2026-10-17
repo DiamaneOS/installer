@@ -4,8 +4,9 @@ Installation and recovery tools and documentation for DiamaneOS.
 
 ## Contents
 
-- The [web installer](docs/web-installer.md) in `web/`: installs an image set from a Chromium-based
-  browser over USB and locks the bootloader after it when the set allows that.
+- The [web installer](docs/web-installer.md) in `web/`: downloads a release or reads an image set,
+  installs it from a Chromium-based browser over USB and locks the bootloader after it when the set
+  allows that.
   - A [page for failed installs](web/recovery.html) and a guide for
     [returning to the stock OS](web/stock.html).
   - [Hosting](docs/hosting.md): the host name, headers and deploy steps it needs.

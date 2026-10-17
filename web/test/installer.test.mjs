@@ -149,7 +149,8 @@ class FakeDevice {
     }
 }
 
-const ui = { connect: async () => {}, reconnect: async () => true, progress() {}, waiting() {}, log() {} };
+const ui = { connect: async () => {}, reconnect: async () => true, leave: async () => true, progress() {}, waiting() {},
+    log() {} };
 
 // The fake phone restarts whenever the installer waits for a restart.
 function restarting(fake) {
@@ -273,7 +274,7 @@ test("only a supported phone that matches the image set is unlocked or installed
     const fake = new FakeDevice();
     fake.unlocked = "no";
     await new Flow(fake, ui).unlock(false);
-    assert.equal(fake.sent.at(-1), "flashing unlock");
+    assert.ok(fake.sent.includes("flashing unlock"));
     // Installing: the phone must report the set's product before the first write.
     const pkg = await fixturePackage("fixture-relock");
     const other = new FakeDevice();
@@ -384,6 +385,7 @@ test("the bootloader is locked only straight after installing a set with a key",
     let flow = new Flow(fake, restarting(fake));
     await flow.install(plain);
     const sent = fake.sent.length;
+    await assert.rejects(flow.lockCritical(plain), PhoneError);
     await assert.rejects(flow.lock(plain), PhoneError);
     assert.equal(fake.sent.length, sent);
 
@@ -396,7 +398,7 @@ test("the bootloader is locked only straight after installing a set with a key",
         },
         "disconnected after the install": async (flow, fake) => {
             await flow.install(pkg);
-            flow.lost(fake.device);
+            assert.equal(flow.lost(fake.device), "critical");
         },
         "unlocking not allowed": async (flow, fake) => {
             await flow.install(pkg);
@@ -411,14 +413,16 @@ test("the bootloader is locked only straight after installing a set with a key",
         const fake = new FakeDevice();
         const flow = new Flow(fake, restarting(fake));
         await setup(flow, fake);
-        await assert.rejects(flow.lock(pkg), PhoneError, why);
+        await assert.rejects(flow.lockCritical(pkg), PhoneError, why);
         assert.ok(!fake.sent.some((text) => text.startsWith("flashing lock")), why);
     }
 
     fake = new FakeDevice();
     flow = new Flow(fake, restarting(fake));
     await flow.install(pkg);
+    await flow.lockCritical(pkg);
     await flow.lock(pkg);
+    await assert.rejects(flow.lockCritical(pkg), PhoneError);
     await assert.rejects(flow.lock(pkg), PhoneError);
 });
 
@@ -428,24 +432,35 @@ const LOCK_CHECKS = ["getvar:product", "getvar:is-userspace", "getvar:unlocked",
 test("the critical partitions are locked first, then the bootloader once the phone is back", async () => {
     const pkg = await fixturePackage("fixture-relock");
     const fake = new FakeDevice();
-    const { callbacks, asked } = lockRestarts(fake, [true, true]);
-    const flow = new Flow(fake, callbacks);
+    const { callbacks, asked } = lockRestarts(fake, [true]);
+    const left = [];
+    const flow = new Flow(fake, { ...callbacks, leave: async (message) => (left.push(message), true) });
     await flow.install(pkg);
-    const sent = fake.sent.length;
-    assert.equal((await flow.lock(pkg)).unlocked, "no");
-    // Still unlocked and unlocking allowed before each lock, the critical partitions locked before the second.
-    assert.deepEqual(fake.sent.slice(sent), [...LOCK_CHECKS, "flashing lock_critical", ...LOCK_CHECKS,
-        "flashing lock", ...LOCK_CHECKS]);
+    assert.equal(flow.lockStep(pkg), "critical");
+    // The bootloader lock waits for its turn.
+    await assert.rejects(flow.lock(pkg), PhoneError);
+    let sent = fake.sent.length;
+    assert.equal((await flow.lockCritical(pkg)).critical, false);
+    // Still unlocked and unlocking allowed before the lock, and the critical partitions locked once back.
+    assert.deepEqual(fake.sent.slice(sent), [...LOCK_CHECKS, "flashing lock_critical", ...LOCK_CHECKS]);
     assert.match(asked[0].message, new RegExp(`Hold ${DEVICES.FP6.boot} while it restarts.*Android must not start`));
-    assert.deepEqual(asked.map(({ back }) => back), [SECONDS.back, SECONDS.back]);
+    assert.equal(asked[0].back, SECONDS.back);
+    assert.equal(flow.lockStep(pkg), "bootloader");
+    // The last lock does not wait for the phone to come back: it erases itself and starts the OS.
+    sent = fake.sent.length;
+    await flow.lock(pkg);
+    assert.deepEqual(fake.sent.slice(sent), [...LOCK_CHECKS, "flashing lock"]);
+    assert.equal(asked.length, 1);
+    assert.match(left[0], /starts DiamaneOS/);
+    assert.equal(flow.lockStep(pkg), null);
 
-    // The phone may start Android after the second lock instead of returning to the bootloader.
-    const started = new FakeDevice();
-    const restarts = lockRestarts(started, [true, null]);
-    const startedFlow = new Flow(started, restarts.callbacks);
-    await startedFlow.install(pkg);
-    assert.equal(await startedFlow.lock(pkg), null);
-    assert.ok(started.locking);
+    // A lock the phone does not confirm leaves the bootloader unlocked.
+    const declined = new FakeDevice();
+    const restarts = lockRestarts(declined, [true]);
+    const declinedFlow = new Flow(declined, { ...restarts.callbacks, leave: async () => false });
+    await declinedFlow.install(pkg);
+    await declinedFlow.lockCritical(pkg);
+    await assert.rejects(declinedFlow.lock(pkg), /not confirmed/);
 });
 
 test("the bootloader is not locked unless the phone is back in the bootloader after the critical lock", async () => {
@@ -461,25 +476,65 @@ test("the bootloader is not locked unless the phone is back in the bootloader af
         const fake = new FakeDevice();
         const flow = new Flow(fake, lockRestarts(fake, [outcome]).callbacks);
         await flow.install(pkg);
-        await assert.rejects(flow.lock(pkg), (error) => error instanceof PhoneError && error.message.includes(message),
-            why);
+        await assert.rejects(flow.lockCritical(pkg),
+            (error) => error instanceof PhoneError && error.message.includes(message), why);
+        await assert.rejects(flow.lock(pkg), PhoneError, why);
         assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")), ["flashing lock_critical"], why);
         assert.equal(fake.unlocked, "yes", why);
-        assert.equal(flow.lockReady(pkg), false, why);
+        assert.equal(flow.lockStep(pkg), null, why);
     }
 });
 
 test("with the critical partitions already locked, only the bootloader is locked", async () => {
     const pkg = await fixturePackage("fixture-relock");
     const fake = new FakeDevice();
-    const { callbacks, asked } = lockRestarts(fake, [true]);
-    const flow = new Flow(fake, callbacks);
+    // A set without firmware may end on a phone whose critical partitions are locked.
+    const flow = new Flow(fake, { ...ui, reconnect: async () => {
+        fake.reconnected();
+        fake.critical = !fake.sent.includes("flash:avb_custom_key");
+        return true;
+    } });
     await flow.install(pkg);
-    fake.critical = false;
-    assert.equal((await flow.lock(pkg)).unlocked, "no");
+    assert.equal(flow.lockStep(pkg), "bootloader");
+    await assert.rejects(flow.lockCritical(pkg), PhoneError);
+    await flow.lock(pkg);
     assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")), ["flashing lock"]);
-    assert.equal(asked.length, 1);
-    assert.doesNotMatch(asked[0].message, /Now the bootloader/);
+});
+
+test("an unlock waits for the phone to come back to Fastboot Mode and reads its state", async () => {
+    for (const critical of [false, true]) {
+        const fake = new FakeDevice();
+        if (critical) {
+            fake.critical = false;
+        } else {
+            fake.unlocked = "no";
+        }
+        const asked = [];
+        const flow = new Flow(fake, { ...ui, reconnect: async (message, seconds, back) => {
+            asked.push({ message, back });
+            fake.unlocked = "yes";
+            fake.critical = critical;
+            fake.reconnected();
+            return true;
+        } });
+        const state = await flow.unlock(critical);
+        assert.ok(fake.sent.includes(critical ? "flashing unlock_critical" : "flashing unlock"));
+        assert.deepEqual([state.unlocked, state.critical], ["yes", critical]);
+        assert.equal(flow.known(), state);
+        assert.match(asked[0].message, new RegExp(`Hold ${DEVICES.FP6.boot} while it restarts`));
+        assert.equal(asked[0].back, SECONDS.back);
+    }
+    // Not back in time, for example because Android started, or not restarted at all.
+    for (const [outcome, result] of [[null, null], [false, /not confirmed/]]) {
+        const fake = new FakeDevice();
+        fake.unlocked = "no";
+        const unlock = new Flow(fake, { ...ui, reconnect: async () => outcome }).unlock(false);
+        if (result === null) {
+            assert.equal(await unlock, null);
+        } else {
+            await assert.rejects(unlock, result);
+        }
+    }
 });
 
 test("SHA-256 and SHA-512 match across chunk boundaries", () => {
@@ -559,10 +614,16 @@ test("a release download is used only once its signature by the factory key chec
     }
 });
 
-test("the page may connect only to the release host", () => {
-    const conf = readFileSync(new URL("../nginx/installer.conf", import.meta.url), "utf8");
+test("the page may connect only to the release host, and its links leave a running install open", () => {
+    const web = new URL("../", import.meta.url);
+    const conf = readFileSync(new URL("nginx/installer.conf", web), "utf8");
     const csp = conf.match(/Content-Security-Policy "([^"]+)"/)[1];
     assert.match(csp, new RegExp(`(^|; )connect-src ${RELEASES};`));
+    const page = readFileSync(new URL("index.html", web), "utf8");
+    const links = [...page.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]).filter((tag) => !/href="#/.test(tag)
+        && !tag.includes('class="skip"'));
+    assert.ok(links.length > 10);
+    assert.deepEqual(links.filter((tag) => !tag.includes('target="_blank"')), []);
 });
 
 test("an AVB footer moves to the end of a larger partition, as fastboot does", async () => {
