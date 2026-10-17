@@ -31,6 +31,7 @@ fastboot snapshot-update cancel || exit /b 1
 :no_snapshot
 fastboot flash boot_a boot.img || exit /b 1
 fastboot flash vbmeta_a vbmeta.img || exit /b 1
+fastboot flash misc misc.img || exit /b 1
 fastboot --set-active=a || exit /b 1
 call :checkslot a || exit /b 1
 fastboot reboot fastboot || exit /b 1

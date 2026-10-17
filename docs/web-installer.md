@@ -79,8 +79,12 @@ fastbootd instead.
 
 - Before the boot images it cancels an update the OS left pending, if `getvar
   snapshot-update-status` reports one.
-- After the boot images the installer selects `flash.slot` and checks that `getvar current-slot`
-  reports exactly that slot. Then it runs `reboot-fastboot`.
+- After the boot images it writes the set's `misc.img`. An unlock leaves an erase request in misc.
+  Recovery would run it instead of fastbootd, and Android would then start without its system
+  partitions.
+- Then it selects `flash.slot` and checks that `getvar current-slot` reports exactly that slot.
+  Then it runs `reboot-fastboot`.
+- A set whose `flash-all.sh` lacks these steps lists other steps, and the installer refuses it.
 - Once the phone is back, it checks that it is in fastbootd and is the same product.
 - It writes the empty layout from `super_empty.img`, then each logical partition to `flash.slot`.
 - It runs `reboot-bootloader` and checks the product, the bootloader and the unlock state again

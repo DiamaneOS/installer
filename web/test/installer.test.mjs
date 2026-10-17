@@ -57,6 +57,9 @@ class FakeDevice {
         this.snapshot = "none";
         this.slot = "a";
         this.slotAtFastboot = null;
+        // The erase request an unlock leaves in misc, and whether recovery found one when fastbootd started.
+        this.eraseRequest = false;
+        this.eraseAtFastboot = null;
         this.responses = new Map();
         this.sent = [];
         // What flash-all.sh would show: flashes, slot changes and restarts.
@@ -103,6 +106,7 @@ class FakeDevice {
         } else if (text.startsWith("reboot")) {
             if (text === "reboot-fastboot") {
                 this.slotAtFastboot = this.slot;
+                this.eraseAtFastboot = this.eraseRequest;
             }
             this.events.push(text === "reboot-fastboot" ? "fastboot reboot fastboot" : `fastboot ${text}`);
             this.mode = { "reboot-fastboot": "fastbootd", "reboot-bootloader": "bootloader" }[text] ?? this.mode;
@@ -131,6 +135,9 @@ class FakeDevice {
         await this.runCommand("download:0");
         await this.runCommand(`flash:${partition}`);
         this.events.push([partition, blob, this.mode]);
+        if (partition === "misc") {
+            this.eraseRequest = false;
+        }
     }
 
     async upload(partition, buffer) {
@@ -226,12 +233,28 @@ test("a set whose files or flash-all.sh disagree is refused", async () => {
         await assert.rejects(readPackage(fixtureFiles(name, changes)), (error) =>
             error instanceof PackageError && error.message.includes(message));
     }
-    const legacy = script.replace("fastboot --set-active=a\ncheckslot a\nfastboot reboot fastboot\n",
-        "fastboot reboot fastboot\n");
-    await assert.rejects(readPackage(fixtureFiles("fixture", { [SCRIPT]: legacy })), /lists other steps/);
+    // Older sets: without the slot check before fastbootd, or without clearing misc first.
+    for (const legacy of [script.replace("fastboot --set-active=a\ncheckslot a\nfastboot reboot fastboot\n",
+        "fastboot flash misc misc.img\nfastboot reboot fastboot\n"),
+    script.replace("fastboot flash misc misc.img\nfastboot --set-active=a\n", "fastboot --set-active=a\n")]) {
+        assert.notEqual(legacy, script);
+        await assert.rejects(readPackage(fixtureFiles("fixture", { [SCRIPT]: legacy })), /lists other steps/);
+    }
     const files = fixtureFiles("fixture");
     files.delete("vendor.img");
     await assert.rejects(readPackage(files), /vendor.img is missing/);
+});
+
+test("misc is written before fastbootd, so recovery does not run an erase an unlock left", async () => {
+    const pkg = await fixturePackage("fixture-relock");
+    const fake = new FakeDevice();
+    fake.eraseRequest = true;
+    await new Flow(fake, restarting(fake)).install(pkg);
+    assert.equal(fake.eraseAtFastboot, false);
+    const enter = fake.sent.indexOf("reboot-fastboot");
+    assert.deepEqual(fake.sent.slice(enter - 4, enter - 2), ["download:0", "flash:misc"]);
+    // The wipe images write it again at the end.
+    assert.equal(fake.sent.filter((text) => text === "flash:misc").length, 2);
 });
 
 test("only a supported phone that matches the image set is unlocked or installed", async () => {

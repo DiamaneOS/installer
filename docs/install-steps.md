@@ -14,9 +14,9 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
    fastboot.js do.
 4. `flash.bootloader` to `flash.slot`: boot, init_boot, vendor_boot, recovery, dtbo, pvmfw,
    vbmeta_system and vbmeta.
-5. When `flash.logical` is not empty: select `flash.slot` and check it, then `reboot fastboot`. In
-   fastbootd: `wipe-super super_empty.img`, each logical partition to that slot, then
-   `reboot-bootloader`.
+5. When `flash.logical` is not empty: `flash misc` with the wipe image, select `flash.slot` and
+   check it, then `reboot fastboot`. In fastbootd: `wipe-super super_empty.img`, each logical
+   partition to that slot, then `reboot-bootloader`.
 6. `wipe.images` in key order: frp, metadata, misc and userdata.
 7. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
    select and check the slot, then `reboot-bootloader`. The phone waits in the bootloader for the
@@ -26,6 +26,10 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 
 Recovery, which holds fastbootd, is among the boot images in step 4. Nothing writes `super.img`
 from the bootloader, which can stall while it writes it.
+
+An unlock leaves an erase request in misc. Without the misc write in step 5, recovery would run that
+erase instead of fastbootd. Step 6 writes misc again and clears the `boot-fastboot` command that
+`reboot fastboot` left there.
 
 ## Checks before the first write
 
