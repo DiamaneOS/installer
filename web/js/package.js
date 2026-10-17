@@ -195,6 +195,18 @@ function checkRecord(record) {
     }
 }
 
+// The files an install of the set uses: build.json, flash-all.sh and every file it writes.
+export function usedFiles(record) {
+    checkRecord(record);
+    const names = new Set([RECORD, SCRIPT]);
+    for (const step of installSteps(record)) {
+        if (step.file !== undefined) {
+            names.add(step.file);
+        }
+    }
+    return names;
+}
+
 // The public key that signs a vbmeta image (avb_vbmeta_image.h), in the format
 // of avb_pkmd.bin, or null.
 export async function vbmetaKey(blob) {
@@ -240,19 +252,13 @@ export async function readPackage(files) {
     } catch {
         throw new PackageError("build.json cannot be read.");
     }
-    checkRecord(record);
+    const needed = usedFiles(record);
     const steps = installSteps(record);
     const expected = steps.map(command);
     const script = scriptCommands(await files.get(SCRIPT).text());
     if (script.length !== expected.length || script.some((line, i) => line !== expected[i])) {
         throw new PackageError("flash-all.sh lists other steps than this installer would run. Use the installer "
             + "that matches this image set, or flash-all.sh.");
-    }
-    const needed = new Set([RECORD, SCRIPT]);
-    for (const step of steps) {
-        if (step.file !== undefined) {
-            needed.add(step.file);
-        }
     }
     for (const name of needed) {
         if (!sums.has(name)) {

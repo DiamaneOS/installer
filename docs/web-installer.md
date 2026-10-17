@@ -22,6 +22,22 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 - Copies an image's AVB footer to the end of a larger partition, as platform-tools `fastboot` does.
 - Keeps a log without serial numbers for reports.
 
+## Release download
+
+As GrapheneOS's installer, it reads the channel file, then the factory ZIP.
+
+- `<product>-stable` holds the line the Updater reads. Its first field is the build number.
+- It fetches `<product>-factory-<build number>.zip.sig` and the ZIP without cookies or referrer.
+- Before it reads the ZIP, it checks the ZIP's SSH signature: the factory key in `js/release.js`,
+  as the tools pin it in `config/release-keys.json`, and the namespace `factory images`.
+  - Ed25519 comes from WebCrypto. The SHA-512 of the ZIP comes from the hash worker.
+- Then it unpacks only the files the install uses from the ZIP's one directory,
+  `<product>-factory-<build number>/`, and checks them against `SHA256SUMS` like a folder.
+- It refuses a ZIP whose `build.json` names another product or build number than the channel
+  file.
+- The download and the unpacked files stay in the browser, which may keep them on disk, until the
+  page closes.
+
 ## Unlocking
 
 - **Unlock bootloader** runs `fastboot flashing unlock` and **Unlock critical partitions** runs
@@ -102,19 +118,20 @@ fastbootd instead.
 | `stock.html` | Returning to the device maker's stock OS and locking it there |
 | `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
 | `js/package.js` | The supported devices (`DEVICES`). Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
+| `js/release.js` | The release download: the channel file, the factory ZIP, its signature and its files |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
-| `js/hash.js`, `js/hash-worker.js`, `js/sha256.js` | SHA-256 of large files in workers |
+| `js/hash.js`, `js/hash-worker.js`, `js/sha256.js`, `js/sha512.js` | SHA-256 and SHA-512 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |
 | `nginx/` | The security headers, and an example server for the installer's own host |
 | `serve.py` | A local server for tests, with the same headers |
-| `test/` | Node tests and two fixtures made with the tools' `flash_all.py` |
+| `test/` | Node tests, and fixtures made with the tools' `flash_all.py`: two image sets and a signed release |
 
 ## Security headers
 
 `nginx/base.conf` goes on every response. `nginx/installer.conf` goes on the installer page and
 `nginx/general.conf` on every other file. They follow GrapheneOS's headers, with these differences:
 
-- No `connect-src`: the installer makes no network requests.
+- `connect-src` allows only `https://releases.diamaneos.de`, for the release download.
 - `worker-src 'self'` instead of `child-src 'self'`, for the hash workers.
 - Trusted Types on the installer page too, with one policy that only creates the hash worker's URL.
 - HSTS as the website sends it: with subdomains, without preload.
@@ -125,9 +142,15 @@ No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes t
 
 - `python3 web/serve.py` serves the installer on <http://localhost:8780/> with the headers.
   Browsers allow WebUSB on localhost without a certificate.
+- `--releases web/test/fixture-release` also serves that folder as the release host on the next
+  port, with its cross-origin headers. The page it serves takes that host and the folder's
+  `allowed_signers` key instead of the real ones.
 - `node --test web/test/installer.test.mjs` runs the tests. They need no phone.
 - `test/fixture` must never be locked. `test/fixture-relock` installs a key and stops for the lock.
-  `test/flash-all-commands.json` holds the steps `flash_all.commands()` returns for each.
+  `test/flash-all-commands.json` holds the steps `flash_all.commands()` returns for each, and the
+  factory key the tools pin.
+- `test/fixture-release` is the lockable set as a release, signed with a throwaway key that
+  `allowed_signers` names. Its ZIP has the ZIP64 records of a ZIP larger than 4 GiB.
 - After a change to `flash_all.py` in the tools, run `python3 -B web/test/make-fixture.py <tools
   checkout>` and the tests again.
 
@@ -137,7 +160,8 @@ No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes t
   `0299c978e9b9f3c841498f7291c8ae901bc4d831`: `static/install/web.html`, `static/js/web-install.js`
   and `static/js/fastboot/ffe7e270/fastboot.min.mjs` with its source map.
 - fastboot.js is GrapheneOS's fork at `ffe7e270061b95fe0f0f3abd1aa7d3c28999d1d9`.
-- The Pixel parts are gone: the release download, the factory zip flash and the custom AVB key
-  removal. The stock page lists the key removal as a command.
+- The Pixel parts are gone: the factory zip flash and the custom AVB key removal. The stock page
+  lists the key removal as a command.
+- The release download is written for DiamaneOS's factory ZIP, and it checks the ZIP's signature.
 - GrapheneOS's licence and notices are in [web/LICENSE](../web/LICENSE) and the fastboot.js
   [NOTICE](../web/js/fastboot/ffe7e270/NOTICE).
