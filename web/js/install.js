@@ -283,7 +283,8 @@ function refresh() {
     const record = pkg?.record;
     const confirmed = record !== undefined
         && (!writesFirmware(record) || document.getElementById("firmware-confirm").checked);
-    setButtonState({ id: Buttons.CONNECT, enabled: usb && !busy });
+    // Connect is greyed out while the phone is connected. A restart disconnects it and enables it again.
+    setButtonState({ id: Buttons.CONNECT, enabled: usb && !busy && !device.isConnected });
     setButtonState({ id: Buttons.UNLOCK, enabled: usb && !busy });
     setButtonState({ id: Buttons.UNLOCK_CRITICAL, enabled: usb && !busy });
     setButtonState({ id: Buttons.INSTALL, enabled: usb && !busy && confirmed });
