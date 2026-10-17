@@ -6,7 +6,9 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 
 ## What it does
 
-- Reads the image set from a local folder. It downloads nothing and sends nothing.
+- Downloads the latest stable release for the connected phone from `releases.diamaneos.de`
+  ([release download](#release-download)), or reads an image set from a local folder. It sends
+  nothing about the phone.
 - Checks each file it uses against the set's `SHA256SUMS` before the first write: every image the
   install writes, `build.json` and `flash-all.sh`.
 - Takes the steps from `build.json` as the tools do, and refuses a set whose `flash-all.sh` lists
@@ -20,7 +22,8 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
 - Asks the user to confirm that the phone does not run a newer stock release than the set's
   firmware. The bootloader cannot report it.
 - Copies an image's AVB footer to the end of a larger partition, as platform-tools `fastboot` does.
-- Keeps a log without serial numbers for reports.
+- Keeps a log without serial numbers for reports, with buttons to copy it or save it as a text file.
+- Opens every link in a new tab, so that a running install keeps its page.
 
 ## Release download
 
@@ -38,12 +41,23 @@ As GrapheneOS's installer, it reads the channel file, then the factory ZIP.
 - The download and the unpacked files stay in the browser, which may keep them on disk, until the
   page closes.
 
+## Reconnecting
+
+- After a restart the browser reconnects on its own to a phone it was allowed before. The installer
+  then reads the phone's state.
+- Connect again shows only when that does not happen within 20 seconds, or within 3 seconds for
+  fastbootd. fastbootd is another USB device, which the browser may ask the user to choose.
+- Steps the phone reports as done are greyed out: Unlock when unlocked, Unlock critical partitions
+  when they are unlocked, and each lock once its turn has passed.
+
 ## Unlocking
 
 - **Unlock bootloader** runs `fastboot flashing unlock` and **Unlock critical partitions** runs
   `fastboot flashing unlock_critical`. The user confirms each on the phone, and each erases it.
 - Both need `flashing get_unlock_ability` to report 1. Otherwise the installer asks the user to turn
   on OEM unlocking.
+- After the command the installer waits for the phone to restart and come back to Fastboot Mode,
+  then reads its state.
 - After an unlock the phone may start Android. The user turns it off and returns it to Fastboot
   Mode. An Android start after the first unlock turns OEM unlocking off, and the critical unlock is
   then refused.
@@ -52,7 +66,11 @@ As GrapheneOS's installer, it reads the channel file, then the factory ZIP.
 
 A set may be locked when `build.json` has `never_lock: false` and names a key in
 `avb_custom_key`. Its install ends with `flash avb_custom_key`, the checked slot and
-`reboot-bootloader`, so the phone waits in the bootloader. **Lock bootloader** then:
+`reboot-bootloader`, so the phone waits in the bootloader.
+
+Two buttons lock it, each enabled only when its turn comes.
+
+**Lock critical partitions**:
 
 1. Is offered only on the connection the install ended on. A restart or a disconnect after the
    install ends the offer, because Android might have started. Another install starts it again.
@@ -60,19 +78,22 @@ A set may be locked when `build.json` has `never_lock: false` and names a key in
    its critical lock state, and that `flashing get_unlock_ability` reports 1.
 3. Sends `fastboot flashing lock_critical`, once, after the user's click. The user confirms on the
    phone and holds the key `DEVICES` names while it restarts.
-4. Waits for the phone to come back to the bootloader, with the Connect again button. If it is not
-   back within two minutes, for example because Android started, the installer stops and leaves the
-   bootloader unlocked.
+4. Waits for the phone to come back to the bootloader. If it is not back within two minutes, for
+   example because Android started, the installer stops and leaves the bootloader unlocked.
 5. Checks the phone again as in step 2, and that the critical partitions are now locked.
-6. Sends `fastboot flashing lock`, once. The user confirms on the phone.
-7. Waits for the phone to restart. If it comes back to Fastboot Mode, the installer checks that
-   `getvar unlocked` reports `no`.
-8. If the phone starts Android instead, the installer says how to read the warning screen: yellow
-   when locked, orange when still unlocked.
+
+**Lock bootloader**:
+
+1. Is offered only on the connection the critical lock ended on, or straight after the install
+   when the critical partitions are already locked.
+2. Checks the phone as before, with the critical partitions locked.
+3. Sends `fastboot flashing lock`, once. The user confirms on the phone.
+4. Waits for the phone to restart. It erases itself and starts DiamaneOS, as after GrapheneOS's
+   installer. The warning screen at each start shows the lock: yellow when locked, orange when
+   still unlocked.
 
 - This is the stock relock order, which `flash-all.sh` prints. Android must not start between the
   two locks.
-- When the critical partitions are already locked, steps 3 to 5 are skipped.
 - The installer never locks a set with `never_lock: true`. The gate is the record, not the name of
   the signing keys.
 
@@ -135,6 +156,7 @@ fastbootd instead.
 - `worker-src 'self'` instead of `child-src 'self'`, for the hash workers.
 - Trusted Types on the installer page too, with one policy that only creates the hash worker's URL.
 - HSTS as the website sends it: with subdomains, without preload.
+- `clipboard-write` for the installer page, for the log's Copy button.
 
 No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes the server.
 
