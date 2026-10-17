@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
+import { createServer } from "node:http";
 import test from "node:test";
 
 import { Flow, PhoneError, SECONDS, StallError } from "../js/flow.js";
@@ -9,7 +10,9 @@ import {
     DEVICES, PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, restartHint, scriptCommands,
     supported, withAvbFooter,
 } from "../js/package.js";
+import { FACTORY_SIGNER, RELEASES, ReleaseError, downloadRelease, parseSignature } from "../js/release.js";
 import { Sha256 } from "../js/sha256.js";
+import { Sha512 } from "../js/sha512.js";
 
 // What the tools' flash_all.commands() returns for each fixture (make-fixture.py).
 const COMMANDS = JSON.parse(readFileSync(new URL("./flash-all-commands.json", import.meta.url), "utf8"));
@@ -479,17 +482,87 @@ test("with the critical partitions already locked, only the bootloader is locked
     assert.doesNotMatch(asked[0].message, /Now the bootloader/);
 });
 
-test("SHA-256 matches across chunk boundaries", () => {
-    for (const size of [0, 55, 56, 64, 65, 1000, 70001]) {
-        const data = randomBytes(size);
-        for (const step of [1, 63, 64, 4096]) {
-            const hash = new Sha256();
-            for (let i = 0; i < size; i += step) {
-                hash.update(data.subarray(i, i + step));
+test("SHA-256 and SHA-512 match across chunk boundaries", () => {
+    for (const [Hash, name] of [[Sha256, "sha256"], [Sha512, "sha512"]]) {
+        for (const size of [0, 55, 56, 64, 65, 111, 112, 128, 129, 1000, 70001]) {
+            const data = randomBytes(size);
+            for (const step of [1, 63, 64, 128, 4096]) {
+                const hash = new Hash();
+                for (let i = 0; i < size; i += step) {
+                    hash.update(data.subarray(i, i + step));
+                }
+                assert.equal(hash.hex(), createHash(name).update(data).digest("hex"), `${name} ${size} ${step}`);
             }
-            assert.equal(hash.hex(), createHash("sha256").update(data).digest("hex"));
         }
     }
+});
+
+// Serves fixture-release as the release host, with changes to its files, and lists the requests.
+async function releaseHost(changes = {}) {
+    const directory = new URL("./fixture-release/", import.meta.url);
+    const requests = [];
+    const server = createServer((request, response) => {
+        requests.push(request.url);
+        const name = request.url.slice(1);
+        try {
+            const data = changes[name] ?? readFileSync(new URL(name, directory));
+            response.writeHead(200, { "Content-Length": data.length, "Access-Control-Allow-Origin": "*" });
+            response.end(data);
+        } catch {
+            response.writeHead(404);
+            response.end();
+        }
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { base: `http://127.0.0.1:${server.address().port}`, requests, close: () => server.close(),
+        signer: readFileSync(new URL("allowed_signers", directory), "utf8") };
+}
+
+// As in the browser: the installer's own SHA-256 and SHA-512.
+async function digest(blob, algorithm) {
+    const hash = algorithm === "sha512" ? new Sha512() : new Sha256();
+    return hash.update(new Uint8Array(await blob.arrayBuffer())).hex();
+}
+
+test("a release download is used only once its signature by the factory key checks out", async () => {
+    assert.equal(FACTORY_SIGNER, COMMANDS.factory_signer);
+    const release = (name) => readFileSync(new URL(`./fixture-release/${name}`, import.meta.url));
+    // A channel file that names another device than the one asked for.
+    const host = await releaseHost({ "FP5-stable": release("FP6-stable") });
+    try {
+        const { version, files } = await downloadRelease("FP6", digest, () => {}, host);
+        assert.equal(version, "2026101700");
+        assert.deepEqual(host.requests, ["/FP6-stable", `/FP6-factory-${version}.zip.sig`,
+            `/FP6-factory-${version}.zip`]);
+        // Only the files the install uses, not super.img.
+        const pkg = await readPackage(files);
+        assert.deepEqual(pkg.steps.map(command), expected("fixture-relock"));
+        assert.ok(!files.has("super.img"));
+        // Another key, another namespace, or another device's channel.
+        await assert.rejects(downloadRelease("FP6", digest, () => {}, { ...host, signer: FACTORY_SIGNER }),
+            /not signed with DiamaneOS's factory key/);
+        const signature = release("FP6-factory-2026101700.zip.sig").toString();
+        assert.throws(() => parseSignature(signature, host.signer, "file"), ReleaseError);
+        await assert.rejects(downloadRelease("FP5", digest, () => {}, host), /no stable release/);
+    } finally {
+        host.close();
+    }
+    // A changed byte anywhere in the ZIP fails the signature before the ZIP is read.
+    const zip = release("FP6-factory-2026101700.zip");
+    const changed = Buffer.from(zip);
+    changed[zip.length - 30] ^= 1;
+    const tampered = await releaseHost({ "FP6-factory-2026101700.zip": changed });
+    try {
+        await assert.rejects(downloadRelease("FP6", digest, () => {}, tampered), /signature is not valid/);
+    } finally {
+        tampered.close();
+    }
+});
+
+test("the page may connect only to the release host", () => {
+    const conf = readFileSync(new URL("../nginx/installer.conf", import.meta.url), "utf8");
+    const csp = conf.match(/Content-Security-Policy "([^"]+)"/)[1];
+    assert.match(csp, new RegExp(`(^|; )connect-src ${RELEASES};`));
 });
 
 test("an AVB footer moves to the end of a larger partition, as fastboot does", async () => {

@@ -12,7 +12,7 @@ const policy = globalThis.trustedTypes?.createPolicy("installer", {
     },
 });
 
-function hashOne(worker, file, onBytes) {
+function hashOne(worker, file, onBytes, algorithm = "sha256") {
     return new Promise((resolve, reject) => {
         worker.onmessage = ({ data }) => {
             if (data.error !== undefined) {
@@ -24,8 +24,22 @@ function hashOne(worker, file, onBytes) {
             }
         };
         worker.onerror = (event) => reject(new Error(event.message || "the hash worker failed"));
-        worker.postMessage(file);
+        worker.postMessage({ file, algorithm });
     });
+}
+
+function worker() {
+    return new Worker(policy ? policy.createScriptURL(WORKER) : WORKER, { type: "module" });
+}
+
+// Resolves to the hex digest of one file, "sha256" or "sha512".
+export async function hashFile(file, algorithm, onProgress) {
+    const one = worker();
+    try {
+        return await hashOne(one, file, (bytes) => onProgress(bytes / (file.size || 1)), algorithm);
+    } finally {
+        one.terminate();
+    }
 }
 
 // entries: [name, File] pairs. Resolves to a Map from name to SHA-256 (hex).
@@ -35,8 +49,7 @@ export async function hashFiles(entries, onProgress) {
     const read = new Map();
     const results = new Map();
     const count = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2, queue.length));
-    const url = policy ? policy.createScriptURL(WORKER) : WORKER;
-    const workers = Array.from({ length: count }, () => new Worker(url, { type: "module" }));
+    const workers = Array.from({ length: count }, worker);
     const report = () => onProgress([...read.values()].reduce((sum, bytes) => sum + bytes, 0) / total);
     try {
         await Promise.all(workers.map(async (worker) => {

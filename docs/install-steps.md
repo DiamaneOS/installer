@@ -40,6 +40,7 @@ erase instead of fastbootd. Step 6 writes misc again and clears the `boot-fastbo
 | Unlocked | `getvar unlocked` is `yes` | the same |
 | Critical partitions, if it writes firmware | `oem device-info` | the same |
 | Files | `sha256sum -c SHA256SUMS`, every file | every file it uses |
+| A downloaded release | none | the factory key's signature over the ZIP, first |
 | No newer stock release on the phone | a warning in the output | a box to tick |
 | Its own steps | none | the same as the set's `flash-all.sh` |
 | The key signs `vbmeta.img` | none | refuses the set otherwise |
@@ -75,5 +76,6 @@ erase instead of fastbootd. Step 6 writes misc again and clears the `boot-fastbo
   (`installSteps`, `checks`).
 - The web installer refuses a set whose `flash-all.sh` lists other `fastboot` commands than its own
   steps. A missed change stops installs instead of changing them.
-- `web/test/fixture` is made with the tools' `flash_all.py`. Make it again after a change there (see
+- `web/test/fixture`, `fixture-relock` and `fixture-release` are made with the tools'
+  `flash_all.py`. Make them again after a change there (see
   [testing](web-installer.md#testing-locally)).
