@@ -288,9 +288,14 @@
                 <p><strong id="lock-status"></strong></p>
 
                 <p>From then on, each start shows a yellow warning screen with the ID of the key the OS is signed
-                with. This is expected: DiamaneOS boots with its own key, not the device maker's. An orange
-                warning screen means the bootloader is still unlocked. Start the phone in Fastboot Mode,
-                install again and lock straight after.</p>
+                with. This is expected: DiamaneOS boots with its own key, not the device maker's. The ID must
+                match DiamaneOS's <a href="/documentation/keys/#verified-boot-key">verified boot key ID</a>:</p>
+
+                <pre>5c4c94ba54e9f4fe81dcfd77e9b919204f0a493593a2677b50498cbcb6cd8f8d</pre>
+
+                <p>Another ID means the phone runs an OS signed with another key. An orange warning screen
+                means the bootloader is still unlocked. Start the phone in Fastboot Mode, install again and lock
+                straight after.</p>
             </section>
 
             <section id="disabling-oem-unlocking">
