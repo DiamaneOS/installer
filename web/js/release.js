@@ -346,14 +346,20 @@ async function releaseFiles(zip, top, onProgress) {
     return { record, files };
 }
 
+// The build number of the channel's release for product.
+export async function latestVersion(product, options = {}) {
+    const { base = RELEASES, channel = CHANNEL, fetcher = fetch } = options;
+    const list = await get(`${base}/${product}-${channel}`, "The release list", fetcher);
+    return parseChannel(await small(list, "The release list"), product, channel).version;
+}
+
 // Downloads the channel's release for product and returns its files, as a
 // folder would give them, once the signature over the whole ZIP checks out.
 // digest(blob, algorithm, onProgress) resolves to the hex digest of a Blob.
 export async function downloadRelease(product, digest, onProgress = () => {}, options = {}) {
-    const { base = RELEASES, signer = FACTORY_SIGNER, channel = CHANNEL, fetcher = fetch } = options;
+    const { base = RELEASES, signer = FACTORY_SIGNER, fetcher = fetch } = options;
     onProgress("Finding the latest release");
-    const list = await get(`${base}/${product}-${channel}`, "The release list", fetcher);
-    const { version } = parseChannel(await small(list, "The release list"), product, channel);
+    const version = await latestVersion(product, options);
     const top = `${product}-factory-${version}`;
     const sig = await get(`${base}/${top}.zip.sig`, "The release signature", fetcher);
     const signature = parseSignature(await small(sig, "The release signature"), signer);

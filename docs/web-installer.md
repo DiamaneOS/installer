@@ -47,8 +47,25 @@ As GrapheneOS's installer, it reads the channel file, then the factory ZIP.
   then reads the phone's state.
 - Connect again shows only when that does not happen within 20 seconds, or within 3 seconds for
   fastbootd. fastbootd is another USB device, which the browser may ask the user to choose.
-- Steps the phone reports as done are greyed out: Unlock when unlocked, Unlock critical partitions
-  when they are unlocked, and each lock once its turn has passed.
+
+## Button states
+
+Every button is greyed out while a step runs. A step that is done is greyed out too, and its button
+says so. It is offered again when it is needed again. `js/buttons.js` holds these rules.
+
+- **Connected** while a phone is connected. **Bootloader unlocked** and **Critical partitions
+  unlocked** while the phone reports them.
+- **Downloaded** with the build number, while the download is the set in use, the connected phone is
+  its product and the channel still names it. The channel is read again when a phone connects, when
+  the page is shown again and before the install. A newer release there stops the install, as in
+  GrapheneOS's installer.
+- **Installed** while a lock is offered, and after the install or the last lock until a phone
+  connects again or another set is chosen. A restart before the lock, or a failed lock that ends
+  the offer, ends it too, because the user then installs again.
+- While a lock is offered, the download and the folder and file choices are greyed out.
+- **Critical partitions locked** once the installer has read them locked after the install, on the
+  same connection.
+- A failed step stays offered. A new image set clears its firmware confirmation.
 
 ## Unlocking
 
@@ -140,6 +157,7 @@ fastbootd instead.
 | `style.css`, `fonts/` | The website's look, with its Sofia Sans font ([licence](../web/fonts/OFL.txt)) |
 | `js/package.js` | The supported devices (`DEVICES`). Reads `build.json`, `SHA256SUMS` and `flash-all.sh`, builds the steps |
 | `js/release.js` | The release download: the channel file, the factory ZIP, its signature and its files |
+| `js/buttons.js` | Which buttons are offered and what they say |
 | `js/flow.js` | The fastboot steps, the dead bootloader watchdog, the switches to fastbootd and back, and the lock |
 | `js/hash.js`, `js/hash-worker.js`, `js/sha256.js`, `js/sha512.js` | SHA-256 and SHA-512 of large files in workers |
 | `js/fastboot/ffe7e270/` | GrapheneOS's fastboot.js build, unchanged ([NOTICE](../web/js/fastboot/ffe7e270/NOTICE)) |

@@ -1,10 +1,11 @@
 // @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&dn=expat.txt MIT
 
+import { buttonStates, releaseCurrent, stillDone } from "./buttons.js";
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
 import { Flow } from "./flow.js";
 import { hashFile, hashFiles } from "./hash.js";
 import { customKey, deviceName, lockAllowed, readPackage, supported, writesFirmware } from "./package.js";
-import { downloadRelease } from "./release.js";
+import { ReleaseError, downloadRelease, latestVersion } from "./release.js";
 
 const Buttons = {
     CONNECT: "connect",
@@ -61,9 +62,12 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function setButtonState({ id, enabled }) {
+function setButtonState({ id, enabled, label }) {
     const button = document.getElementById(`${id}-button`);
     button.disabled = !enabled;
+    if (label !== undefined) {
+        button.textContent = label;
+    }
     return button;
 }
 
@@ -71,6 +75,13 @@ let busy = false;
 // The last action ended with an error. Leaving would lose its log and status.
 let failed = false;
 let pkg = null;
+// The release download in use, as { pkg, version, product }.
+let release = null;
+// The channel's release for each product, as last read.
+const latest = new Map();
+let channelReads = 0;
+// Steps done on a USB device, "install" and "lock-critical", as { pkg, usb }.
+const done = new Map();
 let setStatus = () => {};
 // The status line of the running action, where "Connect again" appears.
 let statusLine = null;
@@ -214,7 +225,37 @@ async function connect() {
         setStatus("Connecting to the phone...");
         await device.connect();
     }
-    return describe(await flow.state());
+    const text = describe(await flow.state());
+    checkChannel();
+    return text;
+}
+
+function markDone(id) {
+    done.set(id, { pkg, usb: device.device });
+}
+
+// Reads the channel again, so that a newer release offers the download again.
+// Resolves to the release it names, or undefined.
+async function checkChannel() {
+    if (release === null) {
+        return undefined;
+    }
+    const { product, version } = release;
+    const read = ++channelReads;
+    let name;
+    try {
+        name = await latestVersion(product);
+        if (name !== version && latest.get(product) !== name) {
+            log(`The stable channel now has release ${name}`);
+        }
+        if (read === channelReads) {
+            latest.set(product, name);
+        }
+    } catch (error) {
+        log(`Checking for a newer release failed: ${error.message}`);
+    }
+    refresh();
+    return name;
 }
 
 async function unlockStep(critical) {
@@ -237,9 +278,21 @@ async function install() {
     if (pkg === null) {
         throw new Error("Get the image set first.");
     }
+    done.clear();
+    // As GrapheneOS's installer, a download is installed only while the channel names it.
+    if (release?.pkg === pkg) {
+        const name = await checkChannel();
+        if (name !== undefined && name !== release.version) {
+            throw new ReleaseError(`The stable channel now has release ${name}. Download release again.`);
+        }
+    }
     await requestWakeLock();
     try {
         const state = await flow.install(pkg);
+        markDone("install");
+        if (flow.lockStep(pkg) === "bootloader") {
+            markDone("lock-critical");
+        }
         if (state !== null) {
             showState(state);
         }
@@ -249,10 +302,18 @@ async function install() {
     }
 }
 
+// Install is offered again once a failed lock ends the chance to lock.
 async function lockCritical() {
     await requestWakeLock();
     try {
         showState(await flow.lockCritical(pkg));
+        markDone("install");
+        markDone("lock-critical");
+    } catch (error) {
+        if (flow.lockStep(pkg) === null) {
+            done.clear();
+        }
+        throw error;
     } finally {
         await releaseWakeLock();
     }
@@ -264,6 +325,11 @@ async function lock() {
     await requestWakeLock();
     try {
         await flow.lock(pkg);
+    } catch (error) {
+        if (flow.lockStep(pkg) === null) {
+            done.clear();
+        }
+        throw error;
     } finally {
         await releaseWakeLock();
     }
@@ -326,7 +392,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
             log(`Error: ${errorMessage}`);
             statusCallback(`Error: ${errorMessage}`);
             statusField.className = "error-text";
-            if (recovery) {
+            if (recovery && error.name !== "ReleaseError") {
                 recoveryLink(statusField);
             }
             // Rethrow the error so it shows up in the console
@@ -345,18 +411,18 @@ function refresh() {
     const confirmed = record !== undefined
         && (!writesFirmware(record) || document.getElementById("firmware-confirm").checked);
     const lockStep = record !== undefined && lockAllowed(record) ? flow.lockStep(pkg) : null;
-    // Connect is greyed out while the phone is connected. A restart disconnects it and enables it again.
-    setButtonState({ id: Buttons.CONNECT, enabled: usb && !busy && !device.isConnected });
-    // A step is greyed out once the phone reports it done, and unlocking while a lock is due.
-    setButtonState({ id: Buttons.UNLOCK, enabled: usb && !busy && lockStep === null && known?.unlocked !== "yes" });
-    setButtonState({ id: Buttons.UNLOCK_CRITICAL, enabled: usb && !busy && lockStep === null
-        && known?.critical !== true && known?.unlocked !== "no" });
-    setButtonState({ id: Buttons.DOWNLOAD, enabled: usb && !busy });
-    setButtonState({ id: Buttons.INSTALL, enabled: usb && !busy && confirmed });
-    setButtonState({ id: Buttons.LOCK_CRITICAL, enabled: usb && !busy && lockStep === "critical" });
-    setButtonState({ id: Buttons.LOCK, enabled: usb && !busy && lockStep === "bootloader" });
+    const current = releaseCurrent(release, pkg, known?.product, latest.get(release?.product));
+    const states = buttonStates({
+        usb, busy, connected: device.isConnected, known, confirmed, lockStep,
+        downloaded: current ? release.version : null,
+        installed: stillDone(done.get("install"), pkg, device.device, busy),
+        criticalLocked: stillDone(done.get("lock-critical"), pkg, device.device, busy),
+    });
+    for (const [id, state] of Object.entries(states)) {
+        setButtonState({ id, ...state });
+    }
     for (const id of ["folder-button", "files-button"]) {
-        document.getElementById(id).disabled = !usb || busy;
+        document.getElementById(id).disabled = !usb || busy || lockStep !== null;
     }
 }
 
@@ -379,10 +445,19 @@ function showPackage(record) {
     document.getElementById("lock-notice").textContent = notice;
 }
 
+// A new image set needs its own firmware confirmation.
+function clearPackage() {
+    pkg = null;
+    release = null;
+    document.getElementById("package-summary").textContent = "";
+    document.getElementById("firmware-check").hidden = true;
+    document.getElementById("firmware-confirm").checked = false;
+    document.getElementById("lock-notice").textContent = "Get the image set first.";
+}
+
 // Checks the files of an image set, from a folder or a release, and keeps it for the install.
 async function usePackage(files, report) {
-    pkg = null;
-    document.getElementById("package-summary").textContent = "";
+    clearPackage();
     const result = await readPackage(files);
     report(`Checking ${result.needed.length} files against SHA256SUMS...`, 0);
     const digests = await hashFiles(result.needed.map((name) => [name, files.get(name)]),
@@ -411,7 +486,10 @@ async function download(report) {
         const digest = (blob, algorithm, onProgress) => hashFile(blob, algorithm, onProgress);
         const { version, files } = await downloadRelease(product, digest, throttled(report));
         log(`Release ${version} downloaded and its signature checked`);
-        return await usePackage(files, report);
+        const text = await usePackage(files, report);
+        release = { pkg, version, product };
+        latest.set(product, version);
+        return text;
     } finally {
         await releaseWakeLock();
     }
@@ -490,6 +568,7 @@ async function readState() {
         busy = false;
         refresh();
     }
+    checkChannel();
 }
 
 // This doesn't really hurt, and because this page is exclusively for web install,
@@ -507,7 +586,8 @@ if ("usb" in navigator) {
     addButtonHook(Buttons.LOCK_CRITICAL, lockCritical, { recovery: true });
     addButtonHook(Buttons.LOCK, lock, { recovery: true });
     navigator.usb.addEventListener("connect", () => {
-        refresh();
+        // After fastboot.js's own listener, which takes the new USB device.
+        setTimeout(refresh);
         if (!busy) {
             readState();
         }
@@ -517,6 +597,7 @@ if ("usb" in navigator) {
         document.getElementById("connect-status").textContent = "Not connected.";
         const step = flow.lost(event.device);
         if (step !== null) {
+            done.clear();
             document.getElementById(step === "critical" ? "lock-critical-status" : "lock-status").textContent =
                 "The phone restarted, so it cannot be locked now. Install again, then lock straight after.";
         }
@@ -528,6 +609,11 @@ if ("usb" in navigator) {
         document.getElementById(`${id}-button`).onclick = () => input.click();
     }
     document.getElementById("firmware-confirm").addEventListener("change", refresh);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+            checkChannel();
+        }
+    });
     refresh();
 } else {
     for (const id of Object.values(Buttons)) {

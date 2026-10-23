@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
 
+import { buttonStates, releaseCurrent, stillDone } from "../js/buttons.js";
 import { Flow, PhoneError, SECONDS, StallError } from "../js/flow.js";
 import {
     DEVICES, PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, restartHint, scriptCommands,
@@ -612,6 +613,49 @@ test("a release download is used only once its signature by the factory key chec
     } finally {
         tampered.close();
     }
+});
+
+test("a step that is done is greyed out and says so, until that no longer holds", () => {
+    const pkg = {};
+    const usb = {};
+    const release = { pkg, version: "2026102203", product: "FP6" };
+    assert.ok(releaseCurrent(release, pkg, "FP6", "2026102203"));
+    assert.ok(releaseCurrent(release, pkg, null, undefined));
+    // A newer release in the channel, a phone of another product, another set or a failed download.
+    assert.ok(!releaseCurrent(release, pkg, "FP6", "2026102300"));
+    assert.ok(!releaseCurrent(release, pkg, "FP5", "2026102203"));
+    assert.ok(!releaseCurrent(release, {}, "FP6", "2026102203"));
+    assert.ok(!releaseCurrent(null, null, "FP6", undefined));
+    // An install holds on its USB device, also through the restarts of a running step.
+    assert.ok(stillDone({ pkg, usb }, pkg, usb, false));
+    assert.ok(stillDone({ pkg, usb }, pkg, {}, true));
+    assert.ok(!stillDone({ pkg, usb }, pkg, {}, false));
+    assert.ok(!stillDone({ pkg, usb }, {}, usb, false));
+    assert.ok(!stillDone(undefined, pkg, usb, false));
+
+    const known = { product: "FP6", unlocked: "yes", critical: true };
+    const at = (changes) => buttonStates({ usb: true, busy: false, connected: true, known, confirmed: true,
+        lockStep: null, downloaded: null, installed: false, criticalLocked: false, ...changes });
+    assert.deepEqual(at({}).download, { enabled: true, label: "Download release" });
+    assert.deepEqual(at({ downloaded: "2026102203" }).download, { enabled: false, label: "Downloaded 2026102203" });
+    assert.deepEqual(at({}).install, { enabled: true, label: "Install" });
+    // The lock decides while it is due, also after a lock step failed.
+    const lockDue = at({ lockStep: "critical" });
+    assert.deepEqual(lockDue.install, { enabled: false, label: "Installed" });
+    assert.equal(lockDue.download.enabled, false);
+    assert.deepEqual(lockDue["lock-critical"], { enabled: true, label: "Lock critical partitions" });
+    const lastLock = at({ lockStep: "bootloader" });
+    assert.deepEqual(lastLock["lock-critical"], { enabled: false, label: "Critical partitions locked" });
+    assert.deepEqual(lastLock.lock, { enabled: true, label: "Lock bootloader" });
+    assert.deepEqual(at({}).connect, { enabled: false, label: "Connected" });
+    assert.deepEqual(at({}).unlock, { enabled: false, label: "Bootloader unlocked" });
+    assert.deepEqual(at({})["unlock-critical"], { enabled: false, label: "Critical partitions unlocked" });
+    // Without a phone the unlocks are offered, and they connect first.
+    const away = at({ connected: false, known: null });
+    assert.deepEqual([away.connect, away.unlock, away["unlock-critical"]].map((b) => b.enabled), [true, true, true]);
+    assert.equal(away.connect.label, "Connect");
+    assert.equal(at({ confirmed: false }).install.enabled, false);
+    assert.ok(Object.values(at({ busy: true })).every((button) => !button.enabled));
 });
 
 test("the page may connect only to the release host, and leaving it asks while a phone is connected", () => {
