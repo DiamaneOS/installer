@@ -4,7 +4,7 @@ import { buttonStates, releaseCurrent, stillDone } from "./buttons.js";
 import * as fastboot from "./fastboot/ffe7e270/fastboot.min.mjs";
 import { Flow } from "./flow.js";
 import { hashFile, hashFiles } from "./hash.js";
-import { customKey, deviceName, lockAllowed, readPackage, supported, writesFirmware } from "./package.js";
+import { customKey, deviceName, lockAllowed, readPackage, supported, testKey, writesFirmware } from "./package.js";
 import { ReleaseError, downloadRelease, latestVersion } from "./release.js";
 
 const Buttons = {
@@ -286,9 +286,11 @@ async function install() {
             throw new ReleaseError(`The stable channel now has release ${name}. Download release again.`);
         }
     }
+    // A test build installs its public test key only when the user ticked its warning.
+    const testLock = testKey(pkg.record) !== null && document.getElementById("test-key-confirm").checked;
     await requestWakeLock();
     try {
-        const state = await flow.install(pkg);
+        const state = await flow.install(pkg, testLock);
         markDone("install");
         if (flow.lockStep(pkg) === "bootloader") {
             markDone("lock-critical");
@@ -410,7 +412,8 @@ function refresh() {
     const known = flow.known();
     const confirmed = record !== undefined
         && (!writesFirmware(record) || document.getElementById("firmware-confirm").checked);
-    const lockStep = record !== undefined && lockAllowed(record) ? flow.lockStep(pkg) : null;
+    const lockable = record !== undefined && (lockAllowed(record) || testKey(record) !== null);
+    const lockStep = lockable ? flow.lockStep(pkg) : null;
     const current = releaseCurrent(release, pkg, known?.product, latest.get(release?.product));
     const states = buttonStates({
         usb, busy, connected: device.isConnected, known, confirmed, lockStep,
@@ -421,7 +424,7 @@ function refresh() {
     for (const [id, state] of Object.entries(states)) {
         setButtonState({ id, ...state });
     }
-    for (const id of ["folder-button", "files-button"]) {
+    for (const id of ["folder-button", "files-button", "test-key-confirm"]) {
         document.getElementById(id).disabled = !usb || busy || lockStep !== null;
     }
 }
@@ -435,8 +438,12 @@ function showPackage(record) {
     ].join(" ").trim();
     document.getElementById("firmware-release").textContent = firmware ?? "the one in the image set";
     document.getElementById("firmware-check").hidden = firmware === null;
+    document.getElementById("test-key-check").hidden = testKey(record) === null;
     let notice = record.notice ?? "This image set must stay on an unlocked phone.";
-    if (lockAllowed(record)) {
+    if (testKey(record) !== null) {
+        notice = "This test build can be locked only if you tick its warning before the install. Read the warning "
+            + "above the Install button first.";
+    } else if (lockAllowed(record)) {
         notice = "This image set installs its signing key, and the bootloader can be locked straight after the "
             + "install.";
     } else if (record.never_lock === false && customKey(record) === null) {
@@ -452,6 +459,8 @@ function clearPackage() {
     document.getElementById("package-summary").textContent = "";
     document.getElementById("firmware-check").hidden = true;
     document.getElementById("firmware-confirm").checked = false;
+    document.getElementById("test-key-check").hidden = true;
+    document.getElementById("test-key-confirm").checked = false;
     document.getElementById("lock-notice").textContent = "Get the image set first.";
 }
 

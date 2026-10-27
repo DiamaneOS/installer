@@ -271,8 +271,8 @@ export class Flow {
 
     // A set with a key ends in the bootloader, and the lock follows on that
     // connection. A restart in between could start Android.
-    async #finish(pkg) {
-        if (pkg.steps.at(-1).op !== "reboot-bootloader") {
+    async #finish(pkg, steps, testLock) {
+        if (steps.at(-1).op !== "reboot-bootloader") {
             return null;
         }
         await this.#restart("The phone is restarting into Fastboot Mode.");
@@ -280,18 +280,25 @@ export class Flow {
         if (state.product !== pkg.record.product || state.userspace === "yes" || state.unlocked !== "yes") {
             throw new PhoneError("The phone did not return to Fastboot Mode unlocked.");
         }
-        this.#installed = { pkg, usb: this.#device.device, step: state.critical ? "critical" : "bootloader" };
+        this.#installed = {
+            pkg, usb: this.#device.device, step: state.critical ? "critical" : "bootloader", testLock,
+        };
         return state;
     }
 
     // Resolves to the phone's state when it waits in the bootloader for the lock.
-    async install(pkg) {
+    // testLock: the user ticked the warning, so a test build installs its key too.
+    async install(pkg, testLock = false) {
         this.#installed = null;
         this.#product = pkg.record.product;
+        const steps = testLock ? pkg.lockSteps : pkg.steps;
+        if (!steps) {
+            throw new PhoneError("This image set does not carry the public test key, so it cannot be locked.");
+        }
         await this.#ui.connect();
         await this.#bootloaderChecks(pkg.record, true);
-        await this.#run(pkg, pkg.steps);
-        return await this.#finish(pkg);
+        await this.#run(pkg, steps);
+        return await this.#finish(pkg, steps, testLock);
     }
 
     async #checkedState() {
@@ -373,7 +380,7 @@ export class Flow {
     }
 
     #lockStart(pkg, step) {
-        if (!lockAllowed(pkg.record)) {
+        if (!lockAllowed(pkg.record, this.#installed?.pkg === pkg && this.#installed.testLock)) {
             throw new PhoneError(pkg.record.notice || "This image set must stay on an unlocked phone.");
         }
         if (this.lockStep(pkg) !== step) {
@@ -406,6 +413,7 @@ export class Flow {
     async lockCritical(pkg) {
         this.#lockStart(pkg, "critical");
         const record = pkg.record;
+        const testLock = this.#installed.testLock;
         const state = await this.#lockable(record);
         // One lock per install, also when this one is refused or not confirmed.
         this.#installed = null;
@@ -427,7 +435,7 @@ export class Flow {
             throw new PhoneError("The critical partitions are still unlocked, so the installer did not lock the "
                 + "bootloader. Install again, then lock.");
         }
-        this.#installed = { pkg, usb: this.#device.device, step: "bootloader" };
+        this.#installed = { pkg, usb: this.#device.device, step: "bootloader", testLock };
         return after;
     }
 

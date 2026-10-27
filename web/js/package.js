@@ -100,26 +100,44 @@ export function command(step) {
     throw new Error(`unknown step ${step.op}`);
 }
 
+// A test build is signed with the public test keys. It carries their AVB key and
+// is locked only after the user ticks the page's warning, as flash-all.sh only
+// with its argument "lock" and a typed yes.
+export const TEST_KEYS = "public-test-keys";
+
 // The AVB public key file the set installs, as flash_all.custom_key(): none for
-// a set that must never be locked.
+// a set that must never be locked or a test build.
 export function customKey(record) {
-    if (record.never_lock) {
+    if (record.never_lock !== false || record.signing === TEST_KEYS) {
+        return null;
+    }
+    return record.avb_custom_key?.file || null;
+}
+
+// The public test key file a test build carries, as flash_all.test_key(), or null.
+export function testKey(record) {
+    if (record.signing !== TEST_KEYS || record.never_lock !== true) {
         return null;
     }
     return record.avb_custom_key?.file || null;
 }
 
 // Whether the installer may lock the bootloader after installing the set.
-export function lockAllowed(record) {
-    return record.never_lock === false && customKey(record) !== null;
+// testLock: the user ticked the warning of a test build before the install.
+export function lockAllowed(record, testLock = false) {
+    return customKey(record) !== null || (testLock && testKey(record) !== null);
 }
 
 // A clean install from the bootloader, in the order of flash_all.commands(). The
 // logical partitions are written in fastbootd on an empty super layout, the rest
 // in the bootloader. Before the boot images an update the OS left pending is
 // cancelled, if the bootloader reports one. A set with a key ends in the
-// bootloader, so that it is locked before Android starts.
-export function installSteps(record) {
+// bootloader, so that it is locked before Android starts. lock: a test build
+// installs its public test key and ends there too.
+export function installSteps(record, lock = false) {
+    if (lock && testKey(record) === null) {
+        throw new PackageError("Only a test build that carries the public test key can be locked on request.");
+    }
     const slot = record.flash.slot;
     const steps = [];
     if (writesFirmware(record)) {
@@ -149,13 +167,22 @@ export function installSteps(record) {
     for (const [name, image] of Object.entries(record.wipe.images)) {
         steps.push(flash(name, image.file));
     }
-    const key = customKey(record);
+    const key = customKey(record) ?? (lock ? testKey(record) : null);
     if (key !== null) {
         steps.push(flash("avb_custom_key", key), { op: "set-active", slot }, { op: "reboot-bootloader" });
     } else {
         steps.push({ op: "set-active", slot }, { op: "reboot" });
     }
     return steps;
+}
+
+// The steps flash-all.sh lists: for a test build, the install that ends with
+// the key for a lock, then the usual ending.
+export function scriptSteps(record) {
+    if (testKey(record) === null) {
+        return installSteps(record);
+    }
+    return [...installSteps(record, true), { op: "set-active", slot: record.flash.slot }, { op: "reboot" }];
 }
 
 export function scriptCommands(text) {
@@ -199,7 +226,7 @@ function checkRecord(record) {
 export function usedFiles(record) {
     checkRecord(record);
     const names = new Set([RECORD, SCRIPT]);
-    for (const step of installSteps(record)) {
+    for (const step of scriptSteps(record)) {
         if (step.file !== undefined) {
             names.add(step.file);
         }
@@ -225,7 +252,7 @@ export async function vbmetaKey(blob) {
 // A locked phone starts only what the installed key signs, so the key must sign
 // the set's own vbmeta.
 async function checkKey(record, files) {
-    const key = customKey(record);
+    const key = customKey(record) ?? testKey(record);
     if (key === null) {
         return;
     }
@@ -254,7 +281,8 @@ export async function readPackage(files) {
     }
     const needed = usedFiles(record);
     const steps = installSteps(record);
-    const expected = steps.map(command);
+    const lockSteps = testKey(record) === null ? null : installSteps(record, true);
+    const expected = scriptSteps(record).map(command);
     const script = scriptCommands(await files.get(SCRIPT).text());
     if (script.length !== expected.length || script.some((line, i) => line !== expected[i])) {
         throw new PackageError("flash-all.sh lists other steps than this installer would run. Use the installer "
@@ -269,7 +297,7 @@ export async function readPackage(files) {
         }
     }
     await checkKey(record, files);
-    return { record, sums, steps, needed: [...needed] };
+    return { record, sums, steps, lockSteps, needed: [...needed] };
 }
 
 export async function isSparse(blob) {

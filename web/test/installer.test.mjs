@@ -9,7 +9,7 @@ import { buttonStates, releaseCurrent, stillDone } from "../js/buttons.js";
 import { Flow, PhoneError, SECONDS, StallError } from "../js/flow.js";
 import {
     DEVICES, PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, restartHint, scriptCommands,
-    supported, withAvbFooter,
+    scriptSteps, supported, withAvbFooter,
 } from "../js/package.js";
 import { FACTORY_SIGNER, RELEASES, ReleaseError, downloadRelease, parseSignature } from "../js/release.js";
 import { Sha256 } from "../js/sha256.js";
@@ -46,6 +46,11 @@ async function fixturePackage(name, slot = "a") {
 
 function expected(name) {
     return COMMANDS[name].map((args) => `fastboot ${args.join(" ")}`);
+}
+
+// flash-all.sh of a test build lists the ending of a confirmed lock before the usual one.
+function scriptExpected(name) {
+    return name === "fixture" ? [...expected("fixture-lock"), ...expected("fixture").slice(-2)] : expected(name);
 }
 
 // Answers like the bootloader of the fixtures' device, or fastbootd after "reboot-fastboot".
@@ -200,7 +205,8 @@ test("the install steps are those of the tools' flash_all.py and flash-all.sh", 
     for (const name of FIXTURES) {
         const pkg = await fixturePackage(name);
         assert.deepEqual(pkg.steps.map(command), expected(name), name);
-        assert.deepEqual(scriptCommands(await pkg.files.get(SCRIPT).text()), expected(name), name);
+        assert.deepEqual(scriptCommands(await pkg.files.get(SCRIPT).text()), scriptExpected(name), name);
+        assert.deepEqual(scriptSteps(pkg.record).map(command), scriptExpected(name), name);
         // After an update the phone may still have one pending, which the install cancels.
         const fake = new FakeDevice();
         fake.snapshot = "merging";
@@ -218,10 +224,44 @@ test("the install steps are those of the tools' flash_all.py and flash-all.sh", 
     }
     // A set that must never be locked gets no key and starts Android, even if it names one.
     const record = (await fixturePackage("fixture-relock")).record;
-    const never = installSteps({ ...record, never_lock: true }).map(command);
-    assert.deepEqual(never, expected("fixture"));
-    assert.ok(!never.some((line) => line.includes("avb_custom_key") || line.includes("flashing")));
-    assert.equal(lockAllowed({ ...record, never_lock: true }), false);
+    for (const changes of [{ never_lock: true }, { never_lock: true, signing: "qualification-keys" },
+        { signing: "public-test-keys" }]) {
+        const never = installSteps({ ...record, ...changes }).map(command);
+        assert.deepEqual(never, expected("fixture"));
+        assert.ok(!never.some((line) => line.includes("avb_custom_key") || line.includes("flashing")));
+        assert.equal(lockAllowed({ ...record, ...changes }, true), false);
+        assert.throws(() => installSteps({ ...record, ...changes }, true), PackageError);
+    }
+});
+
+test("a test build is locked only when its warning was ticked before the install", async () => {
+    const pkg = await fixturePackage("fixture");
+    assert.deepEqual(pkg.lockSteps.map(command), expected("fixture-lock"));
+    assert.equal(lockAllowed(pkg.record), false);
+    assert.equal(lockAllowed(pkg.record, true), true);
+    // Not ticked: the usual install, which starts Android and offers no lock.
+    let fake = new FakeDevice();
+    let flow = new Flow(fake, restarting(fake));
+    await flow.install(pkg);
+    assert.equal(fake.sent.filter((text) => text.startsWith("reboot")).at(-1), "reboot");
+    assert.equal(flow.lockStep(pkg), null);
+    await assert.rejects(flow.lockCritical(pkg), PhoneError);
+    assert.ok(!fake.sent.some((text) => text.startsWith("flashing lock") || text === "flash:avb_custom_key"));
+    // Ticked: the key, then both locks in the stock order.
+    fake = new FakeDevice();
+    flow = new Flow(fake, restarting(fake));
+    await flow.install(pkg, true);
+    assert.equal(fake.sent.filter((text) => text.startsWith("reboot")).at(-1), "reboot-bootloader");
+    assert.ok(fake.sent.includes("flash:avb_custom_key"));
+    assert.equal(flow.lockStep(pkg), "critical");
+    await flow.lockCritical(pkg);
+    await flow.lock(pkg);
+    assert.ok(fake.sent.includes("flashing lock_critical") && fake.sent.includes("flashing lock"));
+    // A set that does not carry the test key cannot be installed for a lock.
+    await assert.rejects(flow.install({ ...pkg, lockSteps: null }, true), /does not carry the public test key/);
+    // The carried key must sign vbmeta.img.
+    await assert.rejects(readPackage(fixtureFiles("fixture", { "avb_pkmd.bin": "another key\n" })),
+        /not the key that signs vbmeta.img/);
 });
 
 test("a set whose files or flash-all.sh disagree is refused", async () => {

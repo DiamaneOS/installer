@@ -21,8 +21,10 @@ Both take the steps from the set's `build.json`, as `flash_all.commands()` in di
 7. With `never_lock: false` and a key file in `avb_custom_key`: `flash avb_custom_key <file>`,
    select and check the slot, then `reboot-bootloader`. The phone waits in the bootloader for the
    lock.
-8. Otherwise select and check the slot, then `reboot`. A set with `never_lock: true` never gets a
-   key.
+8. Otherwise select and check the slot, then `reboot`. A set with `never_lock: true` gets no key.
+   - A test build that carries its public test key gets it as in step 7, only on request:
+     `flash-all.sh lock` with a typed `yes`, or the ticked warning in the web installer.
+   - Its `flash-all.sh` lists both endings: step 7, then step 8.
 
 Recovery, which holds fastbootd, is among the boot images in step 4. Nothing writes `super.img`
 from the bootloader, which can stall while it writes it.
@@ -62,6 +64,8 @@ erase instead of fastbootd. Step 6 writes misc again and clears the `boot-fastbo
   `flashing get_unlock_ability` reporting 1, then `flashing lock`.
   - The web installer has buttons for both and locks in that order, with the checks in
     [web installer](web-installer.md#locking).
+  - A test build asks for the lock before the first write: the argument `lock`, then a typed `yes`
+    after the warning. The web installer asks with a box to tick before the install.
 - **Files:** the web installer needs only the files it uses, not `target-files.zip` or `otatools.zip`.
 - **Empty super layout:** `fastboot wipe-super` writes the metadata of `super_empty.img` from the
   computer. The web installer uploads the file and sends `update-super:super:wipe`, as `fastboot

@@ -4,6 +4,7 @@
 # It writes Fairphone's FP6.QREL.16.111.0 firmware first. Do not run it on a phone that already runs a newer Fairphone release.
 # The phone restarts into fastbootd for the system partitions, then back into the bootloader.
 # This build is signed with public test keys: keep the bootloader unlocked while it is installed.
+# To lock it anyway, run the script with the argument lock. It warns and asks first.
 set -eu
 cd "$(dirname "$0")"
 
@@ -14,9 +15,18 @@ checkslot() { reply=$(fastboot getvar current-slot 2>&1) || fail "Cannot verify 
 waitfor() { echo "Waiting for $2."; n=0; until [ "$(value is-userspace)" = "$1" ]; do n=$((n + 1)); [ $n -lt 90 ] || fail "The phone did not reach $2. Hold Power and Volume down until it restarts into the bootloader, then run this script again."; sleep 2; done; }
 [ "$(value product)" = "FP6" ] || fail 'This image set is for the Fairphone 6 (FP6). Connect that phone in fastboot mode.'
 [ "$(value is-userspace)" = "no" ] || fail 'The phone is in fastbootd. Run "fastboot reboot bootloader" and start again.'
-[ "$(value unlocked)" = "yes" ] || fail 'The bootloader is locked. Unlock it as Fairphone describes, then start again.'
+[ "$(value unlocked)" = "yes" ] || fail 'The bootloader is locked. Unlock it as https://diamaneos.de/install/cli/ describes, then start again.'
 info=$(fastboot oem device-info 2>&1) || true
-printf "%s\n" "$info" | grep -q "Device critical unlocked: true" || fail 'The critical partitions are locked, and the firmware is written to them. Run "fastboot flashing unlock_critical" as Fairphone describes (it erases the phone), then start again.'
+printf "%s\n" "$info" | grep -q "Device critical unlocked: true" || fail 'The critical partitions are locked, and the firmware is written to them. Run "fastboot flashing unlock_critical" as https://diamaneos.de/install/cli/ describes (it erases the phone), then start again.'
+case "$*" in ''|lock) ;; *) fail "Run the script without arguments, or with lock to lock the bootloader after the install." ;; esac
+lock=no
+if [ "${1:-}" = lock ]; then
+echo "WARNING: this build is signed with the public test keys, which anyone can download. A phone locked with it accepts any image or update signed with them, so the lock does not protect it. Lock it only for a test. Then unlock it again. To keep the phone locked, install a release or a build signed with your own keys."
+printf '%s' 'Type yes to install the public test key, so that you can lock the bootloader after the install: '
+read -r answer || answer=
+[ "$answer" = yes ] || fail "Not confirmed. Nothing was written."
+lock=yes
+fi
 if command -v sha256sum >/dev/null 2>&1; then sha256sum --quiet -c SHA256SUMS
 elif command -v shasum >/dev/null 2>&1; then shasum -a 256 --quiet -c SHA256SUMS
 else fail "Neither sha256sum nor shasum is installed, so the images cannot be checked."; fi
@@ -26,6 +36,7 @@ echo "This erases all data on the phone."
 echo "It writes Fairphone's FP6.QREL.16.111.0 firmware first. Do not run it on a phone that already runs a newer Fairphone release."
 echo "The phone restarts into fastbootd for the system partitions, then back into the bootloader."
 echo "This build is signed with public test keys: keep the bootloader unlocked while it is installed."
+echo "To lock it anyway, run the script with the argument lock. It warns and asks first."
 fastboot flash abl_a abl.elf
 fastboot flash abl_b abl.elf
 fastboot flash logfs logfs_ufs_8mb.bin
@@ -52,6 +63,16 @@ fastboot flash frp frp.img
 fastboot flash metadata metadata.img
 fastboot flash misc misc.img
 fastboot flash userdata userdata.img
+if [ "$lock" = yes ]; then
+fastboot flash avb_custom_key avb_pkmd.bin
+fastboot --set-active=a
+checkslot a
+fastboot reboot-bootloader
+echo "WARNING: this build is signed with the public test keys, which anyone can download. A phone locked with it accepts any image or update signed with them, so the lock does not protect it. Lock it only for a test. Then unlock it again. To keep the phone locked, install a release or a build signed with your own keys."
+echo "If the phone ran a locked build before, first run fastboot oem reset-rollback, or the test build will not start once locked. Keep OEM unlocking on in the setup, so that you can unlock the phone again."
+echo "To lock, first check that fastboot flashing get_unlock_ability reports 1, or stop there. Then run fastboot flashing lock_critical and confirm on the phone. It wipes the phone and restarts. Hold Volume down while it restarts, so that it comes back to the bootloader: Android must not start before the second lock. Then fastboot flashing get_unlock_ability must report 1 again, or stop there. Then run fastboot flashing lock and confirm on the phone."
+else
 fastboot --set-active=a
 checkslot a
 fastboot reboot
+fi

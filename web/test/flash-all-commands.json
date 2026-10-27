@@ -1,5 +1,5 @@
 {
-  "tools": "41a013c03e7ea906a12741033d1ed2f98f9359e6",
+  "tools": "af5d8fa6fab56ef7809cb3a6de1b337b23f41b64",
   "factory_signer": "diamaneos ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB+N9xKoysBkgXsI9di16Bamn6d2wIULS5SfJazATsZ0",
   "fixture": [
     ["flash", "abl_a", "abl.elf"],
@@ -24,6 +24,31 @@
     ["flash", "userdata", "userdata.img"],
     ["--set-active=a"],
     ["reboot"]
+  ],
+  "fixture-lock": [
+    ["flash", "abl_a", "abl.elf"],
+    ["flash", "abl_b", "abl.elf"],
+    ["flash", "logfs", "logfs_ufs_8mb.bin"],
+    ["flash", "storsec", "storsec.mbn"],
+    ["flash", "modemst1", "modemst1.img"],
+    ["flash", "modemst2", "modemst2.img"],
+    ["snapshot-update", "cancel"],
+    ["flash", "boot_a", "boot.img"],
+    ["flash", "vbmeta_a", "vbmeta.img"],
+    ["flash", "misc", "misc.img"],
+    ["--set-active=a"],
+    ["reboot", "fastboot"],
+    ["wipe-super", "super_empty.img"],
+    ["flash", "system_a", "system.img"],
+    ["flash", "vendor_a", "vendor.img"],
+    ["reboot-bootloader"],
+    ["flash", "frp", "frp.img"],
+    ["flash", "metadata", "metadata.img"],
+    ["flash", "misc", "misc.img"],
+    ["flash", "userdata", "userdata.img"],
+    ["flash", "avb_custom_key", "avb_pkmd.bin"],
+    ["--set-active=a"],
+    ["reboot-bootloader"]
   ],
   "fixture-relock": [
     ["flash", "abl_a", "abl.elf"],

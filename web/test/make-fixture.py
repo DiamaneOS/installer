@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Write the test image sets, with flash-all.sh and the expected steps from the tools.
 
-fixture/ must never be locked. fixture-relock/ installs an AVB key and stops in
-the bootloader for the lock. fixture-release/ is a release as the release host
+fixture/ is a test build: it carries the public test key and installs it only
+for a lock on request. fixture-relock/ installs an AVB key and stops in the
+bootloader for the lock. fixture-release/ is a release as the release host
 serves it: the channel file, the factory ZIP and its signature by a throwaway
 factory key, which allowed_signers names. Run it again after flash_all.py in
 diamaneos-tools changes:
@@ -28,6 +29,7 @@ IMAGES = ['abl.elf', 'logfs_ufs_8mb.bin', 'storsec.mbn', 'modemst1.img', 'modems
           'super.img', 'super_empty.img', 'system.img', 'vendor.img', 'frp.img', 'metadata.img', 'misc.img',
           'userdata.img']
 KEY = b'fixture AVB public key\n'
+TEST_KEY = b'fixture AVB public test key\n'
 # The build profile's device block, which build.json carries and the scripts' texts name.
 DEVICE = {'name': 'Fairphone 6', 'maker': 'Fairphone', 'bootloader_keys': 'Power and Volume down'}
 RELEASE = {'build_number': '2026101700', 'build_datetime': 1792195200}
@@ -71,7 +73,7 @@ def write(out, extra, files):
         (out / name).write_text(text)
     lines = [f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}' for p in sorted(out.iterdir())]
     (out / 'SHA256SUMS').write_text('\n'.join(lines) + '\n')
-    return flash_all.commands(record)
+    return record
 
 
 def release(out, images):
@@ -118,16 +120,19 @@ def main():
                             check=True).stdout.strip()
     signer = json.loads((TOOLS / 'config/release-keys.json').read_text())['factory_signer']
     relock = {**images, 'vbmeta.img': vbmeta(KEY), 'avb_pkmd.bin': KEY}
+    test = write(TEST / 'fixture', {
+        'signing': 'public-test-keys', 'never_lock': True, 'avb_custom_key': {'file': 'avb_pkmd.bin'},
+        'notice': 'Test build signed with public test keys. Keep the bootloader unlocked.',
+    }, {**images, 'vbmeta.img': vbmeta(TEST_KEY), 'avb_pkmd.bin': TEST_KEY})
     expected = {
         'tools': commit,
         'factory_signer': signer,
-        'fixture': write(TEST / 'fixture', {
-            'signing': 'public-test-keys', 'never_lock': True,
-            'notice': 'Test build signed with public test keys. Keep the bootloader unlocked.',
-        }, {**images, 'vbmeta.img': b'fixture vbmeta.img\n'}),
-        'fixture-relock': write(TEST / 'fixture-relock', {
+        'fixture': flash_all.commands(test),
+        # The test build's install when its lock is confirmed.
+        'fixture-lock': flash_all.commands(test, lock=True),
+        'fixture-relock': flash_all.commands(write(TEST / 'fixture-relock', {
             'never_lock': False, 'avb_custom_key': {'file': 'avb_pkmd.bin'},
-        }, relock),
+        }, relock)),
     }
     release(TEST / 'fixture-release', relock)
     # One command per line, so a change shows up as a short diff.

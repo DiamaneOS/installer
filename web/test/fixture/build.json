@@ -1,4 +1,7 @@
 {
+  "avb_custom_key": {
+    "file": "avb_pkmd.bin"
+  },
   "build_id": "fixture",
   "device": {
     "bootloader_keys": "Power and Volume down",

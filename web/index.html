@@ -215,8 +215,8 @@
                     system partitions.</li>
                     <li>The phone returns to Fastboot Mode for the empty data partitions.</li>
                     <li>An image set that can be locked also installs its signing key, and the phone restarts
-                    into Fastboot Mode for the lock. Do not start Android, and lock straight away. Any other set
-                    restarts into DiamaneOS.</li>
+                    into Fastboot Mode for the lock. Do not start Android, and lock straight away. A test build
+                    does so only when its warning is ticked. Any other set restarts into DiamaneOS.</li>
                 </ol>
 
                 <p>fastbootd is a new USB device to the browser. If the installer shows Connect again, wait
@@ -229,6 +229,20 @@
                 <p id="firmware-check" hidden=""><label><input type="checkbox" id="firmware-confirm"/> The
                 phone does not run a newer stock release than
                 <span id="firmware-release">the one in the image set</span>.</label></p>
+
+                <div id="test-key-check" hidden="">
+                    <p><strong>Warning:</strong> this build is signed with the public test keys, which anyone can
+                    download. A phone locked with it accepts any image or update signed with them, so the lock
+                    does not protect it. Lock it only for a test. Then unlock it again. To keep the phone locked,
+                    install a release or a build signed with your own keys.</p>
+
+                    <p>A test build keeps rollback index 0. If the phone ran a locked build before, the locked
+                    test build does not start. Keep OEM unlocking on in the setup, so that you can unlock the
+                    phone again.</p>
+
+                    <p><label><input type="checkbox" id="test-key-confirm"/> Install the public test key, so that
+                    I can lock the bootloader after the install. I understand the risk.</label></p>
+                </div>
 
                 <button id="install-button" disabled="">Install</button>
 
@@ -260,8 +274,9 @@
                     after.</li>
                     <li>The critical partitions are locked first, then the bootloader. This is the device
                     maker's order.</li>
-                    <li>The installer never locks an image set that must stay unlocked, such as one signed with
-                    public test keys. Anyone can sign images with those keys.</li>
+                    <li>The installer never locks an image set that must stay unlocked. A test build signed
+                    with the public test keys is locked only when its warning is ticked before the install.
+                    Anyone can sign images with those keys.</li>
                     <li>It locks only while the phone allows unlocking, so that a phone that fails to start
                     can be unlocked again.</li>
                 </ul>

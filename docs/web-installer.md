@@ -85,6 +85,15 @@ A set may be locked when `build.json` has `never_lock: false` and names a key in
 `avb_custom_key`. Its install ends with `flash avb_custom_key`, the checked slot and
 `reboot-bootloader`, so the phone waits in the bootloader.
 
+A test build (`signing: public-test-keys`, `never_lock: true`) that names its public test key in
+`avb_custom_key` may be locked only on request.
+
+- The page shows a warning: anyone can sign images and updates the locked phone accepts. The user
+  should unlock it again after the test, or install properly signed images.
+- Only when the user ticks the box under the warning before the install does the install end with
+  the key, as above. Otherwise it starts Android as usual.
+- The key must sign `vbmeta.img`, as for any set with a key.
+
 Two buttons lock it, each enabled only when its turn comes.
 
 **Lock critical partitions**:
@@ -111,8 +120,8 @@ Two buttons lock it, each enabled only when its turn comes.
 
 - This is the stock relock order, which `flash-all.sh` prints. Android must not start between the
   two locks.
-- The installer never locks a set with `never_lock: true`. The gate is the record, not the name of
-  the signing keys.
+- The installer never locks any other set with `never_lock: true`, such as one signed with
+  qualification keys.
 
 ## When the phone stops answering
 
@@ -186,9 +195,10 @@ No analytics, fonts or files from other hosts. [Hosting](hosting.md) describes h
   port, with its cross-origin headers. The page it serves takes that host and the folder's
   `allowed_signers` key instead of the real ones.
 - `node --test web/test/installer.test.mjs` runs the tests. They need no phone.
-- `test/fixture` must never be locked. `test/fixture-relock` installs a key and stops for the lock.
-  `test/flash-all-commands.json` holds the steps `flash_all.commands()` returns for each, and the
-  factory key the tools pin.
+- `test/fixture` is a test build with its public test key, locked only on request.
+  `test/fixture-relock` installs a key and stops for the lock.
+- `test/flash-all-commands.json` holds the steps `flash_all.commands()` returns for each, those of
+  the test build's lock, and the factory key the tools pin.
 - `test/fixture-release` is the lockable set as a release, signed with a throwaway key that
   `allowed_signers` names. Its ZIP has the ZIP64 records of a ZIP larger than 4 GiB.
 - After a change to `flash_all.py` in the tools, run `python3 -B web/test/make-fixture.py <tools
