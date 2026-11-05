@@ -44,7 +44,7 @@ The installer is served at `https://diamaneos.de/install/web/`, as GrapheneOS se
 
 The release download fetches from `releases.diamaneos.de` in CORS mode, without cookies.
 
-- The channel files (`/FP6-stable`), the factory ZIPs and their `.sig` files need
+- The channel files (`/<CODENAME>-stable`), the factory ZIPs and their `.sig` files need
   `Access-Control-Allow-Origin: *`, or the website's origin.
 - The requests are plain GETs, so there is no preflight and no other CORS header is needed.
 - `Cross-Origin-Resource-Policy: same-origin` may stay. Browsers check it only for requests without
