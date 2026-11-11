@@ -134,6 +134,11 @@ The bootloader stops answering when a reply to a command is cut off, and only a 
 - The installer then never closes the connection. It asks the user to restart the phone into
   Fastboot Mode with the buttons `DEVICES` names for it, and sends nothing more until the phone
   is a new USB device.
+- After the restart that ends an install with a key, a WebUSB transfer error counts as a stall too.
+  Once the phone is back, the installer checks it again: the set's product, the bootloader
+  unlocked, the set's slot active and `flashing get_unlock_ability` 1. Only then does it offer the
+  lock, and only to the install that just ran in the same page. If a check fails, the lock stays
+  off and the message says why.
 
 ## fastbootd
 

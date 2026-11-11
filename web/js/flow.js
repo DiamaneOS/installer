@@ -13,6 +13,10 @@ import {
 export const SECONDS = { flash: 60, command: 30, confirm: 300, back: 120 };
 
 const CONFIRM_LOCK = "On the phone, choose to lock with the volume buttons and press Power.";
+const LOCK_AGAIN = "It cannot be locked now. Install again, then lock straight after.";
+
+// What WebUSB throws when a transfer fails, for example "A transfer error has occurred".
+const TRANSFER_ERROR = "NetworkError";
 
 export class PhoneError extends Error {
     constructor(message) {
@@ -43,6 +47,7 @@ export class Flow {
     // closes it: a reply cut short leaves the bootloader unable to answer.
     #dead = null;
     // The set installed on this connection and the lock it takes next, "critical" or "bootloader".
+    // Set only once every step of the install ran in this page. A reload forgets it.
     #installed = null;
     // The phone's last state, on the USB device it was read from.
     #known = null;
@@ -276,13 +281,62 @@ export class Flow {
             return null;
         }
         await this.#restart("The phone is restarting into Fastboot Mode.");
-        const state = await this.state();
+        const usb = this.#device.device;
+        let state;
+        try {
+            state = await this.state();
+        } catch (error) {
+            if (!(error instanceof StallError || error.name === TRANSFER_ERROR)) {
+                throw error;
+            }
+            state = await this.#recheck(pkg, steps, usb, error);
+        }
         if (state.product !== pkg.record.product || state.userspace === "yes" || state.unlocked !== "yes") {
             throw new PhoneError("The phone did not return to Fastboot Mode unlocked.");
         }
         this.#installed = {
             pkg, usb: this.#device.device, step: state.critical ? "critical" : "bootloader", testLock,
         };
+        return state;
+    }
+
+    // The bootloader may not answer after the last restart, or the browser may
+    // report a transfer error. As after a stall, nothing more goes to that USB
+    // device. The user restarts the phone into Fastboot Mode, and the installer
+    // checks it again: the lock is offered only if this install's slot is still
+    // active and unlocking is still allowed, which an Android start turns off.
+    async #recheck(pkg, steps, usb, error) {
+        this.#dead = usb;
+        this.#ui.log(`Reading the phone's state failed: ${error.message}`);
+        const product = pkg.record.product;
+        if (!(await this.#ui.reconnect(`The phone did not answer after the install. ${restartHint(product)} `
+                + "The installer then checks it again.", this.#seconds.confirm))) {
+            throw new PhoneError(`The phone did not restart, so the installer could not check it. ${LOCK_AGAIN}`);
+        }
+        const slot = steps.findLast((step) => step.op === "set-active")?.slot;
+        let state;
+        let current;
+        try {
+            state = await this.state();
+            this.#ui.log("fastboot getvar current-slot");
+            current = await this.getvar("current-slot");
+        } catch (again) {
+            if (again instanceof StallError || again.name === TRANSFER_ERROR) {
+                this.#dead = this.#device.device;
+                throw new PhoneError(`The phone did not answer again. ${restartHint(product)} ${LOCK_AGAIN}`);
+            }
+            throw again;
+        }
+        if (state.product !== product || state.userspace === "yes" || state.unlocked !== "yes") {
+            throw new PhoneError(`The phone is not in Fastboot Mode with an unlocked bootloader. ${LOCK_AGAIN}`);
+        }
+        if (current !== slot) {
+            throw new PhoneError(`The phone reports slot ${current ?? "none"}, not ${slot}. ${LOCK_AGAIN}`);
+        }
+        if (state.ability !== 1) {
+            throw new PhoneError("The phone no longer allows unlocking, so it could not be unlocked again if it "
+                + "failed to start. Do not lock it.");
+        }
         return state;
     }
 

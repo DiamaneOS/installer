@@ -542,6 +542,118 @@ test("with the critical partitions already locked, only the bootloader is locked
     assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")), ["flashing lock"]);
 });
 
+// How the bootloader may fail after the restart that ends the install: each
+// transfer fails, as Chromium reports it, or the bootloader never answers.
+const FAILS = {
+    "a transfer error": () => Promise.reject(new DOMException(
+        "Failed to execute 'transferIn' on 'USBDevice': A transfer error has occurred.", "NetworkError")),
+    "a stall": () => new Promise(() => {}),
+};
+
+// The restart that ends the install brings the phone back with a bootloader
+// that fails. The next restart, the user's, takes outcome: false when the phone
+// did not restart, or a function that changes the phone once it is back, as the
+// user or Android would.
+function finalRestartFails(fake, fails, outcome = () => {}) {
+    const asked = [];
+    let broken = null;
+    const callbacks = { ...ui, reconnect: async (message, seconds) => {
+        if (broken === null && fake.sent.at(-1) === "reboot-bootloader" && fake.sent.includes("flash:avb_custom_key")) {
+            fake.reconnected();
+            broken = { usb: fake.device, at: fake.sent.length };
+            fake.device.transferIn = fails;
+            return true;
+        }
+        if (broken !== null && asked.length === 0) {
+            asked.push({ message, seconds });
+            if (outcome === false) {
+                return false;
+            }
+            fake.reconnected();
+            outcome(fake);
+            return true;
+        }
+        fake.reconnected();
+        return true;
+    } };
+    return { callbacks, asked, broken: () => broken };
+}
+
+function lockButtons(flow, pkg) {
+    const states = buttonStates({ usb: true, busy: false, connected: true, known: flow.known(), confirmed: true,
+        lockStep: flow.lockStep(pkg), downloaded: null, installed: false, criticalLocked: false });
+    return [states["lock-critical"].enabled, states.lock.enabled, states.install.enabled];
+}
+
+test("a transfer error or a stall after the last restart leads to a restart and new checks", async () => {
+    const pkg = await fixturePackage("fixture-relock");
+    for (const [why, fails] of Object.entries(FAILS)) {
+        const fake = new FakeDevice();
+        const { callbacks, asked, broken } = finalRestartFails(fake, fails);
+        const flow = new Flow(fake, callbacks, FAST);
+        assert.equal((await flow.install(pkg)).product, "FP6", why);
+        // One command reached the failing USB device, which stays open. The phone
+        // back from the user's restart reports the set's product, the bootloader
+        // unlocked, unlocking allowed and the set's slot.
+        assert.deepEqual(fake.sent.slice(broken().at), ["getvar:product", ...LOCK_CHECKS, "getvar:current-slot"], why);
+        assert.notEqual(broken().usb.closed, true, why);
+        assert.match(asked[0].message, new RegExp(`did not answer after the install. ${restartHint("FP6")}`), why);
+        assert.equal(asked[0].seconds, FAST.confirm, why);
+        assert.equal(flow.lockStep(pkg), "critical", why);
+        assert.deepEqual(lockButtons(flow, pkg), [true, false, false], why);
+        await flow.lockCritical(pkg);
+        await flow.lock(pkg);
+        assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")),
+            ["flashing lock_critical", "flashing lock"], why);
+    }
+});
+
+test("after a failed read the lock is offered only to the whole install in the same page", async () => {
+    const pkg = await fixturePackage("fixture-relock");
+    const fake = new FakeDevice();
+    const flow = new Flow(fake, finalRestartFails(fake, FAILS["a transfer error"]).callbacks, FAST);
+    await flow.install(pkg);
+    // A reload, or another image set, has no install record.
+    const reloaded = new Flow(fake, restarting(fake), FAST);
+    assert.equal(reloaded.lockStep(pkg), null);
+    await assert.rejects(reloaded.lockCritical(pkg), PhoneError);
+    assert.equal(flow.lockStep(await fixturePackage("fixture-relock")), null);
+    // An install that stopped before its end, then a restart into Fastboot Mode.
+    const stopped = new FakeDevice((text) => text === "flash:userdata");
+    const partial = new Flow(stopped, finalRestartFails(stopped, FAILS["a stall"]).callbacks, FAST);
+    await assert.rejects(partial.install(pkg), StallError);
+    stopped.stall = () => false;
+    stopped.reconnected();
+    assert.equal((await partial.state()).unlocked, "yes");
+    assert.equal(partial.lockStep(pkg), null);
+    await assert.rejects(partial.lockCritical(pkg), PhoneError);
+    for (const phone of [fake, stopped]) {
+        assert.ok(!phone.sent.some((text) => text.startsWith("flashing lock")));
+    }
+});
+
+test("a failed check after a failed read keeps the lock off and says why", async () => {
+    const pkg = await fixturePackage("fixture-relock");
+    const stops = {
+        "not restarted": [false, "did not restart, so the installer could not check it"],
+        "Android started and turned unlocking off": [(fake) => (fake.ability = 0), "no longer allows unlocking"],
+        "another slot": [(fake) => (fake.slot = "b"), "reports slot b, not a"],
+        "back in fastbootd": [(fake) => (fake.mode = "fastbootd"), "not in Fastboot Mode with an unlocked"],
+        "bootloader locked": [(fake) => (fake.unlocked = "no"), "not in Fastboot Mode with an unlocked"],
+        "no answer again": [(fake) => (fake.device.transferIn = FAILS["a transfer error"]), "did not answer again"],
+    };
+    for (const [why, [outcome, message]] of Object.entries(stops)) {
+        const fake = new FakeDevice();
+        const flow = new Flow(fake, finalRestartFails(fake, FAILS["a transfer error"], outcome).callbacks, FAST);
+        await assert.rejects(flow.install(pkg),
+            (error) => error instanceof PhoneError && error.message.includes(message), why);
+        assert.equal(flow.lockStep(pkg), null, why);
+        assert.deepEqual(lockButtons(flow, pkg), [false, false, true], why);
+        await assert.rejects(flow.lockCritical(pkg), PhoneError, why);
+        assert.ok(!fake.sent.some((text) => text.startsWith("flashing lock")), why);
+    }
+});
+
 test("an unlock waits for the phone to come back to Fastboot Mode and reads its state", async () => {
     for (const critical of [false, true]) {
         const fake = new FakeDevice();
