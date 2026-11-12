@@ -8,8 +8,8 @@ import test from "node:test";
 import { buttonStates, releaseCurrent, stillDone } from "../js/buttons.js";
 import { Flow, PhoneError, SECONDS, StallError } from "../js/flow.js";
 import {
-    DEVICES, PackageError, SCRIPT, command, installSteps, lockAllowed, readPackage, restartHint, scriptCommands,
-    scriptSteps, supported, withAvbFooter,
+    DEVICES, PackageError, SCRIPT, canonical, command, installSteps, lockAllowed, readPackage, restartHint,
+    scriptCommands, scriptSteps, supported, withAvbFooter,
 } from "../js/package.js";
 import { FACTORY_SIGNER, RELEASES, ReleaseError, downloadRelease, parseSignature } from "../js/release.js";
 import { Sha256 } from "../js/sha256.js";
@@ -323,6 +323,24 @@ test("only a supported phone that matches the image set is unlocked or installed
     await assert.rejects(new Flow(other, restarting(other)).install(pkg), new RegExp(`for the ${DEVICES.FP6.name}`));
     assert.deepEqual(other.sent, ["getvar:product"]);
     assert.deepEqual(other.events, []);
+    // A US Fairphone 6 reports FP6_US: it unlocks and installs as an FP6. A longer name stays refused.
+    assert.equal(canonical("FP6_US"), "FP6");
+    assert.equal(canonical("FP6_USA"), "FP6_USA");
+    const us = new FakeDevice();
+    us.product = "FP6_US";
+    us.unlocked = "no";
+    await new Flow(us, ui).unlock(false);
+    assert.ok(us.sent.includes("flashing unlock"));
+    const usInstall = new FakeDevice();
+    usInstall.product = "FP6_US";
+    await new Flow(usInstall, restarting(usInstall)).install(pkg);
+    assert.ok(usInstall.sent.some((text) => text.startsWith("flash:")));
+    for (const product of ["FP6_USA", "FP6-US"]) {
+        const longer = new FakeDevice();
+        longer.product = product;
+        longer.unlocked = "no";
+        await assert.rejects(new Flow(longer, ui).unlock(false), new RegExp(`reports ${product}`));
+    }
     // A restart hint takes the buttons from the data.
     assert.match(restartHint("FP6"), new RegExp(DEVICES.FP6.force));
     assert.doesNotMatch(restartHint("FP5"), /undefined/);

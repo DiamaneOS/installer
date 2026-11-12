@@ -19,6 +19,8 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
   (not fastbootd), unlocked, and unlocked critical partitions when the set writes firmware.
 - Refuses a set for a product that `DEVICES` in `js/package.js` does not list, and unlocks only a
   phone whose product it lists. A new device is one entry there.
+- Reads a US Fairphone 6, which reports `FP6_US`, as `FP6`: the same phone with the same firmware
+  and image sets (`BOOTLOADER_NAMES`).
 - Asks the user to confirm that the phone does not run a newer stock release than the set's
   firmware. The bootloader cannot report it.
 - Copies an image's AVB footer to the end of a larger partition, as platform-tools `fastboot` does.

@@ -18,6 +18,16 @@ export const DEVICES = Object.freeze({
 
 export const DEVICES_PAGE = "diamaneos.de/devices";
 
+// Other names a bootloader reports for a device in DEVICES. A US Fairphone 6
+// reports FP6_US: the same phone with the same firmware and image sets.
+const BOOTLOADER_NAMES = Object.freeze({ FP6_US: "FP6" });
+
+// The DEVICES product for what "getvar product" reported.
+export function canonical(product) {
+    return typeof product === "string" && Object.hasOwn(BOOTLOADER_NAMES, product)
+        ? BOOTLOADER_NAMES[product] : product;
+}
+
 export function supported(product) {
     return typeof product === "string" && Object.hasOwn(DEVICES, product);
 }
