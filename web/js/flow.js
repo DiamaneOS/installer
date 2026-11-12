@@ -174,19 +174,31 @@ export class Flow {
         let critical = null;
         let ability = null;
         if (userspace !== "yes") {
-            try {
-                critical = (await this.#command("oem device-info")).includes(CRITICAL_UNLOCKED);
-                const match = /get_unlock_ability:\s*(\d+)/.exec(await this.#command("flashing get_unlock_ability"));
-                ability = match ? Number(match[1]) : null;
-            } catch (error) {
-                if (error.name !== "FastbootError") {
-                    throw error;
+            critical = await this.#optional("oem device-info", (text) => text.includes(CRITICAL_UNLOCKED));
+            ability = await this.#optional("flashing get_unlock_ability", (text) => {
+                const match = /get_unlock_ability:\s*(\d+)/.exec(text);
+                if (!match) {
+                    this.#ui.log(`fastboot flashing get_unlock_ability gave no value: ${JSON.stringify(text.trim().slice(0, 200))}`);
                 }
-            }
+                return match ? Number(match[1]) : null;
+            });
         }
         const state = { product, userspace, unlocked, critical, ability };
         this.#known = { state, usb: this.#device.device };
         return state;
+    }
+
+    // A bootloader command whose answer the installer can do without: null when the bootloader refuses it.
+    async #optional(text, read) {
+        try {
+            return read(await this.#command(text));
+        } catch (error) {
+            if (error.name !== "FastbootError") {
+                throw error;
+            }
+            this.#ui.log(`fastboot ${text} failed: ${(error.bootloaderMessage ?? error.message).trim()}`);
+            return null;
+        }
     }
 
     // The state last read on this connection, or null.
@@ -334,6 +346,10 @@ export class Flow {
         if (current !== slot) {
             throw new PhoneError(`The phone reports slot ${current ?? "none"}, not ${slot}. ${LOCK_AGAIN}`);
         }
+        if (state.ability === null) {
+            throw new PhoneError("The bootloader did not say whether it allows unlocking, so it might not be "
+                + "possible to unlock it again if it failed to start. Do not lock it.");
+        }
         if (state.ability !== 1) {
             throw new PhoneError("The phone no longer allows unlocking, so it could not be unlocked again if it "
                 + "failed to start. Do not lock it.");
@@ -366,9 +382,6 @@ export class Flow {
         if (state.userspace === "yes") {
             throw new PhoneError("The phone is in fastbootd. Restart it into Fastboot Mode and start again.");
         }
-        if (state.critical === null || state.ability === null) {
-            throw new PhoneError("The bootloader did not report its lock state.");
-        }
         return state;
     }
 
@@ -394,10 +407,14 @@ export class Flow {
         if (critical && state.unlocked !== "yes") {
             throw new PhoneError("Unlock the bootloader first.");
         }
+        if (critical && state.critical === null) {
+            throw new PhoneError("The bootloader did not report the lock state of the critical partitions.");
+        }
         if (critical && state.critical) {
             return state;
         }
-        if (state.ability !== 1) {
+        // Without an answer on unlocking, the bootloader decides: it refuses the unlock if it is not allowed.
+        if (state.ability !== null && state.ability !== 1) {
             throw new PhoneError(critical
                 ? "The phone no longer allows unlocking. This happens when Android starts after the first unlock."
                 : "The phone does not allow unlocking. Turn on OEM unlocking in Developer options and start again.");
@@ -454,6 +471,10 @@ export class Flow {
         }
         if (state.critical === null) {
             throw new PhoneError("The bootloader did not report its lock state.");
+        }
+        if (state.ability === null) {
+            throw new PhoneError("The bootloader did not say whether it allows unlocking, so it might not be "
+                + "possible to unlock it again if it failed to start. Do not lock it.");
         }
         if (state.ability !== 1) {
             throw new PhoneError("The phone does not allow unlocking, so it could not be unlocked again if it "

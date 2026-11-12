@@ -74,7 +74,10 @@ says so. It is offered again when it is needed again. `js/buttons.js` holds thes
 - **Unlock bootloader** runs `fastboot flashing unlock` and **Unlock critical partitions** runs
   `fastboot flashing unlock_critical`. The user confirms each on the phone, and each erases it.
 - Both need `flashing get_unlock_ability` to report 1. Otherwise the installer asks the user to turn
-  on OEM unlocking.
+  on OEM unlocking. If the bootloader refuses that command or gives no number, the installer sends the
+  unlock anyway and shows the bootloader's answer if it refuses. The Log records the reply.
+- Unlocking the critical partitions also needs `oem device-info` to report their lock state.
+- The lock checks below still need both answers.
 - After the command the installer waits for the phone to restart and come back to Fastboot Mode,
   then reads its state.
 - After an unlock the phone may start Android. The user turns it off and returns it to Fastboot

@@ -467,6 +467,10 @@ test("the bootloader is locked only straight after installing a set with a key",
             await flow.install(pkg);
             fake.responses.set("oem device-info", Object.assign(new Error("unknown"), { name: "FastbootError" }));
         },
+        "unlocking not reported": async (flow, fake) => {
+            await flow.install(pkg);
+            fake.responses.set("flashing get_unlock_ability", "");
+        },
     };
     for (const [why, setup] of Object.entries(refused)) {
         const fake = new FakeDevice();
@@ -655,6 +659,8 @@ test("a failed check after a failed read keeps the lock off and says why", async
     const stops = {
         "not restarted": [false, "did not restart, so the installer could not check it"],
         "Android started and turned unlocking off": [(fake) => (fake.ability = 0), "no longer allows unlocking"],
+        "unlocking not reported": [(fake) => fake.responses.set("flashing get_unlock_ability", ""),
+            "did not say whether it allows unlocking"],
         "another slot": [(fake) => (fake.slot = "b"), "reports slot b, not a"],
         "back in fastbootd": [(fake) => (fake.mode = "fastbootd"), "not in Fastboot Mode with an unlocked"],
         "bootloader locked": [(fake) => (fake.unlocked = "no"), "not in Fastboot Mode with an unlocked"],
@@ -670,6 +676,46 @@ test("a failed check after a failed read keeps the lock off and says why", async
         await assert.rejects(flow.lockCritical(pkg), PhoneError, why);
         assert.ok(!fake.sent.some((text) => text.startsWith("flashing lock")), why);
     }
+});
+
+test("without an answer on unlocking, the bootloader decides whether to unlock", async () => {
+    const failed = () => Object.assign(new Error("unknown command"), { name: "FastbootError", status: "FAIL",
+        bootloaderMessage: "unknown command" });
+    for (const [why, reply, logged] of [["refused", failed(), /get_unlock_ability failed: unknown command/],
+        ["unreadable", "unlock ability: yes\n", /gave no value: "unlock ability: yes"/]]) {
+        for (const critical of [false, true]) {
+            const fake = new FakeDevice();
+            if (critical) {
+                fake.critical = false;
+            } else {
+                fake.unlocked = "no";
+            }
+            fake.responses.set("flashing get_unlock_ability", reply);
+            const lines = [];
+            const flow = new Flow(fake, { ...ui, log: (line) => lines.push(line), reconnect: async () => {
+                fake.unlocked = "yes";
+                fake.critical = critical;
+                fake.reconnected();
+                return true;
+            } });
+            assert.equal((await flow.state()).ability, null, why);
+            await flow.unlock(critical);
+            assert.ok(fake.sent.includes(critical ? "flashing unlock_critical" : "flashing unlock"), why);
+            assert.ok(lines.some((line) => logged.test(line)), why);
+        }
+    }
+    // The bootloader refuses: the installer says so and stops.
+    const fake = new FakeDevice();
+    fake.unlocked = "no";
+    fake.responses.set("flashing get_unlock_ability", "");
+    fake.responses.set("flashing unlock", Object.assign(new Error("refused"), { name: "FastbootError", status: "FAIL",
+        bootloaderMessage: "Flashing Unlock is not allowed\n" }));
+    await assert.rejects(new Flow(fake, ui).unlock(false), /The bootloader refused: Flashing Unlock is not allowed$/);
+    // Unlocking the critical partitions still needs their lock state.
+    const unknown = new FakeDevice();
+    unknown.responses.set("oem device-info", failed());
+    await assert.rejects(new Flow(unknown, ui).unlock(true), /lock state of the critical partitions/);
+    assert.ok(!unknown.sent.some((text) => /^flashing (un)?lock/.test(text)));
 });
 
 test("an unlock waits for the phone to come back to Fastboot Mode and reads its state", async () => {
