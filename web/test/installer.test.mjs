@@ -1001,6 +1001,12 @@ test("the page may connect only to the release host, its help opens in a new tab
     const script = readFileSync(new URL("js/install.js", web), "utf8");
     assert.match(script, /link\.href = "recovery\.html";\s*\/\/[^\n]*\n\s*link\.target = "_blank";\s*link\.rel = "noopener";/);
     assert.match(script, /if \(busy \|\| failed \|\| device\.isConnected\) \{\s*event\.preventDefault\(\);/);
+    // Every error points to the log, which the page does not keep: it stores nothing on the device.
+    assert.match(script, /recoveryLink\(statusField\);\s*\}\s*logHint\(statusField\);/);
+    assert.match(page, /<details id="log-section">/);
+    assert.doesNotMatch(readdirSync(new URL("js/", web), { recursive: true }).filter((name) => /\.m?js$/.test(name))
+        .map((name) => readFileSync(new URL(`js/${name}`, web), "utf8"))
+        .join("\n"), /localStorage|sessionStorage|indexedDB|document\.cookie|caches\.open/);
 });
 
 test("an AVB footer moves to the end of a larger partition, as fastboot does", async () => {

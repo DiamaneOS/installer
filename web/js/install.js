@@ -350,6 +350,17 @@ function recoveryLink(statusField) {
     statusField.append(" ", link);
 }
 
+// The page keeps nothing, so a reload or another page loses the log.
+function logHint(statusField) {
+    const link = document.createElement("a");
+    link.href = "#log-section";
+    link.textContent = "copy or save the log";
+    link.onclick = () => {
+        document.getElementById("log-section").open = true;
+    };
+    statusField.append(" Before you reload or leave this page, ", link, ".");
+}
+
 function addButtonHook(id, callback, { recovery = false } = {}) {
     let statusContainer = document.getElementById(`${id}-status-container`);
     let statusField = document.getElementById(`${id}-status`);
@@ -400,6 +411,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
             if (recovery && error.name !== "ReleaseError") {
                 recoveryLink(statusField);
             }
+            logHint(statusField);
             // Rethrow the error so it shows up in the console
             throw error;
         } finally {
