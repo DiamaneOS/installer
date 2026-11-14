@@ -102,7 +102,10 @@ export class Flow {
             usb[name] = (...args) => {
                 state.pending++;
                 state.since = Date.now();
-                return original(...args).finally(() => {
+                return original(...args).catch((error) => {
+                    state.failed = name;
+                    throw error;
+                }).finally(() => {
                     state.pending--;
                     state.since = Date.now();
                 });
@@ -151,6 +154,26 @@ export class Flow {
 
     async #command(text) {
         return (await this.#call(() => this.#device.runCommand(text))).text;
+    }
+
+    // Sends a command after which the phone restarts. The phone may leave USB
+    // before its answer reaches the browser, which then reports a transfer
+    // error on reading it. The command went out, so the restart is under way,
+    // and what follows waits for the phone and checks it again.
+    async #restarting(text, seconds = this.#seconds.command) {
+        this.#watch();
+        const state = this.#transfers.get(this.#device.device);
+        if (state !== undefined) {
+            state.failed = null;
+        }
+        try {
+            await this.#call(() => this.#device.runCommand(text), seconds);
+        } catch (error) {
+            if (error.name !== TRANSFER_ERROR || state?.failed !== "transferIn") {
+                throw error;
+            }
+            this.#ui.log("The phone left USB before its answer arrived, as it does when it restarts quickly");
+        }
     }
 
     async #expect(name, wanted, message) {
@@ -267,7 +290,7 @@ export class Flow {
                     `The phone did not confirm slot ${step.slot}. The install stopped before restarting.`);
             } else if (step.op === "reboot-fastboot") {
                 this.#ui.progress(`Starting fastbootd ${count}`, done / total);
-                await this.#command(step.op);
+                await this.#restarting(step.op);
                 await this.#restart("The phone is starting fastbootd.", true);
                 await this.#expect("is-userspace", "yes",
                     "The phone did not start fastbootd. Restart it into Fastboot Mode and install again.");
@@ -275,12 +298,13 @@ export class Flow {
                 inBootloader = false;
             } else if (step.op === "reboot-bootloader" && i < steps.length - 1) {
                 this.#ui.progress(`Returning to Fastboot Mode ${count}`, done / total);
-                await this.#command(step.op);
+                await this.#restarting(step.op);
                 await this.#restart("The phone is restarting into Fastboot Mode.");
                 await this.#bootloaderChecks(record, false);
                 inBootloader = true;
             } else {
-                await this.#command(step.op);
+                // The last step: reboot, or reboot-bootloader for the lock.
+                await this.#restarting(step.op);
             }
             done += sizes[i];
         }
@@ -388,7 +412,7 @@ export class Flow {
     async #lockCommand(text) {
         this.#ui.log(`fastboot ${text}`);
         try {
-            await this.#call(() => this.#device.runCommand(text), this.#seconds.confirm);
+            await this.#restarting(text, this.#seconds.confirm);
         } catch (error) {
             if (error.name === "FastbootError" && error.status === "FAIL") {
                 throw new PhoneError(`The bootloader refused: ${error.bootloaderMessage.trim()}`);

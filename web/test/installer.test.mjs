@@ -55,9 +55,12 @@ function scriptExpected(name) {
 
 // Answers like the bootloader of the fixtures' device, or fastbootd after "reboot-fastboot".
 // stall(text, device) returns true for the command the phone never answers.
+// drop(text) returns true for a command the phone carries out but whose answer
+// fails to arrive, as when it leaves USB at once to restart.
 class FakeDevice {
-    constructor(stall = () => false) {
+    constructor(stall = () => false, drop = () => false) {
         this.stall = stall;
+        this.drop = drop;
         this.mode = "bootloader";
         this.product = "FP6";
         this.unlocked = "yes";
@@ -89,7 +92,8 @@ class FakeDevice {
         }
         const usb = {
             transferOut: async () => ({ status: "ok" }),
-            transferIn: () => (usb.stalled ? new Promise(() => {}) : Promise.resolve({})),
+            transferIn: () => (usb.stalled ? new Promise(() => {}) : usb.dropped ? FAILS["a transfer error"]()
+                : Promise.resolve({})),
             close: async () => {
                 usb.closed = true;
             },
@@ -100,8 +104,19 @@ class FakeDevice {
     async runCommand(text) {
         this.sent.push(text);
         this.device.stalled = this.stall(text, this);
+        const dropped = this.drop(text);
         await this.device.transferOut();
+        if (dropped) {
+            const answer = this.answer(text);
+            this.device.dropped = true;
+            await this.device.transferIn();
+            return answer;
+        }
         await this.device.transferIn();
+        return this.answer(text);
+    }
+
+    answer(text) {
         if (this.responses.has(text)) {
             const response = this.responses.get(text);
             if (response instanceof Error) {
@@ -232,6 +247,54 @@ test("the install steps are those of the tools' flash_all.py and flash-all.sh", 
         assert.equal(lockAllowed({ ...record, ...changes }, true), false);
         assert.throws(() => installSteps({ ...record, ...changes }, true), PackageError);
     }
+});
+
+test("a restart command whose answer is lost to the restart goes on as a restart", async () => {
+    // The phone leaves USB before its OKAY reaches the browser, after each command that restarts it.
+    const restarts = new Set(["reboot-fastboot", "reboot-bootloader", "reboot", "flashing unlock",
+        "flashing unlock_critical", "flashing lock_critical", "flashing lock"]);
+    for (const name of FIXTURES) {
+        const pkg = await fixturePackage(name);
+        const fake = new FakeDevice(() => false, (text) => restarts.has(text));
+        fake.unlocked = "no";
+        fake.critical = false;
+        const logged = [];
+        const callbacks = { ...restarting(fake), log: (line) => logged.push(line) };
+        const flow = new Flow(fake, callbacks, FAST);
+        // Each unlock restarts the phone, which then reports itself unlocked.
+        const unlocks = { "flashing unlock": () => (fake.unlocked = "yes"),
+            "flashing unlock_critical": () => (fake.critical = true) };
+        callbacks.reconnect = async () => {
+            unlocks[fake.sent.at(-1)]?.();
+            fake.reconnected();
+            return true;
+        };
+        assert.equal((await flow.unlock(false)).unlocked, "yes", name);
+        assert.equal((await flow.unlock(true)).critical, true, name);
+        await flow.install(pkg);
+        assert.deepEqual(asScript(fake.events, pkg),
+            expected(name).filter((line) => line !== "fastboot snapshot-update cancel"), name);
+        assert.ok(logged.some((line) => line.startsWith("The phone left USB before its answer arrived")), name);
+        if (name === "fixture-relock") {
+            await flow.lockCritical(pkg);
+            await flow.lock(pkg);
+            assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")),
+                ["flashing lock_critical", "flashing lock"], name);
+        }
+    }
+    // A failed send is no restart: the install stops there.
+    const pkg = await fixturePackage("fixture");
+    const fake = new FakeDevice();
+    const flow = new Flow(fake, restarting(fake), FAST);
+    const send = fake.runCommand.bind(fake);
+    fake.runCommand = async (text) => {
+        if (text === "reboot-fastboot") {
+            fake.device.transferOut = FAILS["a transfer error"];
+        }
+        return send(text);
+    };
+    await assert.rejects(flow.install(pkg), { name: "NetworkError" });
+    assert.ok(!fake.events.includes("fastboot reboot fastboot"));
 });
 
 test("a test build is locked only when its warning was ticked before the install", async () => {
