@@ -19,8 +19,10 @@ const Buttons = {
 
 // After a restart the browser reconnects on its own to a phone it was allowed
 // before, fastbootd too once it was chosen. Connect again shows after these
-// seconds without it. fastbootd takes about half a minute to start.
-const ASK_SECONDS = { same: 20, other: 60 };
+// seconds without it, sooner for fastbootd, which the browser asks the user to
+// choose the first time. Its text then says it is needed only if the installer
+// does not continue.
+const ASK_SECONDS = { same: 20, other: 3 };
 
 let wakeLock = null;
 
