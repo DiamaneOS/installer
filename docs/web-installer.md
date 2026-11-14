@@ -49,8 +49,9 @@ As GrapheneOS's installer, it reads the channel file, then the factory ZIP.
 
 - After a restart the browser reconnects on its own to a phone it was allowed before. The installer
   then reads the phone's state.
-- Connect again shows only when that does not happen within 20 seconds, or within 3 seconds for
-  fastbootd. fastbootd is another USB device, which the browser may ask the user to choose.
+- Connect again shows only when that does not happen within 20 seconds, or within 60 seconds for
+  fastbootd, which takes about half a minute to start. fastbootd is another USB device, which the
+  browser may ask the user to choose the first time.
 
 ## Button states
 

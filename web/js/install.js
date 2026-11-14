@@ -18,10 +18,9 @@ const Buttons = {
 };
 
 // After a restart the browser reconnects on its own to a phone it was allowed
-// before. Connect again shows after these seconds without it, sooner when the
-// phone comes back as another USB device, such as fastbootd, which the browser
-// may ask the user to choose.
-const ASK_SECONDS = { same: 20, other: 3 };
+// before, fastbootd too once it was chosen. Connect again shows after these
+// seconds without it. fastbootd takes about half a minute to start.
+const ASK_SECONDS = { same: 20, other: 60 };
 
 let wakeLock = null;
 
