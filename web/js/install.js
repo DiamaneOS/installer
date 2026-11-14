@@ -350,7 +350,13 @@ function recoveryLink(statusField) {
     statusField.append(document.createElement("br"), link);
 }
 
-// The page keeps nothing, so a reload or another page loses the log.
+// Under every error: the troubleshooting page, and the log, which the page
+// does not keep, so a reload or another page loses it.
+function errorHints(statusField) {
+    recoveryLink(statusField);
+    logHint(statusField);
+}
+
 function logHint(statusField) {
     const link = document.createElement("a");
     link.href = "#log-section";
@@ -361,7 +367,7 @@ function logHint(statusField) {
     statusField.append(document.createElement("br"), "Before you reload or leave this page, ", link, ".");
 }
 
-function addButtonHook(id, callback, { recovery = false } = {}) {
+function addButtonHook(id, callback) {
     let statusContainer = document.getElementById(`${id}-status-container`);
     let statusField = document.getElementById(`${id}-status`);
     let progressBar = document.getElementById(`${id}-progress`);
@@ -408,10 +414,7 @@ function addButtonHook(id, callback, { recovery = false } = {}) {
             log(`Error: ${errorMessage}`);
             statusCallback(`Error: ${errorMessage}`);
             statusField.className = "error-text";
-            if (recovery && error.name !== "ReleaseError") {
-                recoveryLink(statusField);
-            }
-            logHint(statusField);
+            errorHints(statusField);
             // Rethrow the error so it shows up in the console
             throw error;
         } finally {
@@ -542,6 +545,7 @@ async function choosePackage(list) {
     } catch (error) {
         report(`Error: ${error.message}`);
         status.className = "error-text";
+        errorHints(status);
         log(`Error: ${error.message}`);
     } finally {
         busy = false;
@@ -604,11 +608,11 @@ setupLog();
 if ("usb" in navigator) {
     addButtonHook(Buttons.CONNECT, connect);
     addButtonHook(Buttons.UNLOCK, () => unlockStep(false));
-    addButtonHook(Buttons.UNLOCK_CRITICAL, () => unlockStep(true), { recovery: true });
+    addButtonHook(Buttons.UNLOCK_CRITICAL, () => unlockStep(true));
     addButtonHook(Buttons.DOWNLOAD, download);
-    addButtonHook(Buttons.INSTALL, install, { recovery: true });
-    addButtonHook(Buttons.LOCK_CRITICAL, lockCritical, { recovery: true });
-    addButtonHook(Buttons.LOCK, lock, { recovery: true });
+    addButtonHook(Buttons.INSTALL, install);
+    addButtonHook(Buttons.LOCK_CRITICAL, lockCritical);
+    addButtonHook(Buttons.LOCK, lock);
     navigator.usb.addEventListener("connect", () => {
         // After fastboot.js's own listener, which takes the new USB device.
         setTimeout(refresh);

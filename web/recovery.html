@@ -93,6 +93,9 @@
                     still be installed.</li>
                     <li>Bring it to Fastboot Mode, connect it and press Install again. The install writes
                     everything again from the start.</li>
+                    <li>If the USB connection was lost while the phone stayed in Fastboot Mode, do not
+                    restart it: its bootloader or firmware may be only partly written. Plug it back in, press
+                    Connect and install again. In fastbootd it may restart: choose Reboot to bootloader.</li>
                     <li>If it fails at the same place twice, try another USB port or cable, without a
                     hub.</li>
                 </ul>

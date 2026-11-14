@@ -1021,7 +1021,9 @@ test("the page may connect only to the release host, its help opens in a new tab
     assert.match(script, /link\.href = "recovery\.html";\s*\/\/[^\n]*\n\s*link\.target = "_blank";\s*link\.rel = "noopener";/);
     assert.match(script, /if \(busy \|\| failed \|\| device\.isConnected\) \{\s*event\.preventDefault\(\);/);
     // Every error points to the log, which the page does not keep: it stores nothing on the device.
-    assert.match(script, /recoveryLink\(statusField\);\s*\}\s*logHint\(statusField\);/);
+    assert.match(script, /statusField\.className = "error-text";\s*errorHints\(statusField\);/);
+    assert.match(script, /status\.className = "error-text";\s*errorHints\(status\);/);
+    assert.doesNotMatch(script, /recovery: true/);
     assert.match(page, /<details id="log-section">/);
     assert.doesNotMatch(readdirSync(new URL("js/", web), { recursive: true }).filter((name) => /\.m?js$/.test(name))
         .map((name) => readFileSync(new URL(`js/${name}`, web), "utf8"))
