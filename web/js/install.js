@@ -343,6 +343,9 @@ async function lock() {
 function recoveryLink(statusField) {
     const link = document.createElement("a");
     link.href = "recovery.html";
+    // A new tab, so that this page keeps its log and download.
+    link.target = "_blank";
+    link.rel = "noopener";
     link.textContent = "What to do now";
     statusField.append(" ", link);
 }

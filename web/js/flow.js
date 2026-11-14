@@ -254,15 +254,38 @@ export class Flow {
         await this.#call(() => this.#device.flashBlob(partition, image, onProgress), this.#seconds.flash);
     }
 
-    // Runs the steps from the bootloader. The logical partitions are written in
-    // fastbootd, between the restarts into it and back.
+    // Runs the steps from the bootloader. A lost USB connection stops the
+    // install with what to do: in Fastboot Mode the bootloader or firmware may
+    // be half written, so the phone must not restart before the next install.
     async #run(pkg, steps) {
+        const at = { inBootloader: true, step: null };
+        try {
+            await this.#steps(pkg, steps, at);
+        } catch (error) {
+            if (![TRANSFER_ERROR, GONE_ERROR].includes(error.name) || at.step?.op !== "flash") {
+                throw error;
+            }
+            this.#ui.log(`The USB connection failed: ${error.message}`);
+            const what = `The USB connection to the phone was lost while writing ${at.step.partition}.`;
+            throw new PhoneError(at.inBootloader
+                ? `${what} Do not restart the phone: its bootloader or firmware may be only partly written. Plug `
+                    + "it back in, press Connect and install again while it stays in Fastboot Mode."
+                : `${what} The bootloader and firmware are complete. Plug the phone back in. If it shows `
+                    + "fastbootd, choose Reboot to bootloader with the volume buttons and press Power. Then press "
+                    + "Connect and install again.");
+        }
+    }
+
+    // The logical partitions are written in fastbootd, between the restarts into it and back.
+    async #steps(pkg, steps, at) {
         const record = pkg.record;
         const sizes = steps.map((step) => (step.file === undefined ? 0 : pkg.files.get(step.file).size));
         const total = sizes.reduce((sum, size) => sum + size, 0) || 1;
         let done = 0;
         let inBootloader = true;
         for (const [i, step] of steps.entries()) {
+            at.step = step;
+            at.inBootloader = inBootloader;
             const count = `(${i + 1} of ${steps.length})`;
             const where = inBootloader ? "" : " in fastbootd";
             if (step.op === "cancel-snapshot") {

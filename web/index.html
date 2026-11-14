@@ -46,12 +46,12 @@
         <main id="web-install" tabindex="-1">
             <h1><a href="#web-install">Web installer</a></h1>
 
-            <p>This page installs DiamaneOS on a <a href="/devices/">supported device</a> over USB. It
+            <p>This page installs DiamaneOS on a <a href="/devices/" target="_blank" rel="noopener">supported device</a> over USB. It
             downloads the release from <code>releases.diamaneos.de</code>, or reads an image set from this
             computer. It sends nothing about the phone over the network.</p>
 
             <p>It runs the same steps as the image set's <code>flash-all.sh</code>, which the
-            <a href="/install/cli/">command-line installation</a> uses, and checks every file before it writes
+            <a href="/install/cli/" target="_blank" rel="noopener">command-line installation</a> uses, and checks every file before it writes
             anything. While a phone is connected, the browser asks before leaving this page.</p>
 
             <nav id="table-of-contents" class="toc">
@@ -77,7 +77,7 @@
                 <h2><a href="#before-you-start">Before you start</a></h2>
 
                 <ul>
-                    <li>A <a href="/devices/">supported device</a> whose bootloader can be unlocked.</li>
+                    <li>A <a href="/devices/" target="_blank" rel="noopener">supported device</a> whose bootloader can be unlocked.</li>
                     <li>A Chromium-based browser, such as Chrome, Chromium or Edge. Other browsers have no
                     WebUSB.</li>
                     <li>At least 2 GB of free memory, and free disk space for the release download and its
@@ -113,7 +113,7 @@
             <section id="booting-into-the-bootloader">
                 <h2><a href="#booting-into-the-bootloader">Booting into the bootloader</a></h2>
 
-                <p>Turn the phone off. Hold its bootloader keys, which the <a href="/devices/">supported
+                <p>Turn the phone off. Hold its bootloader keys, which the <a href="/devices/" target="_blank" rel="noopener">supported
                 devices</a> page lists, until the bootloader screen appears. This page calls that screen
                 Fastboot Mode.</p>
             </section>
@@ -307,7 +307,7 @@
 
                 <p>From then on, each start shows a yellow warning screen with the ID of the key the OS is signed
                 with. This is expected: DiamaneOS boots with its own key, not the device maker's. The ID must
-                match DiamaneOS's <a href="/documentation/keys/#verified-boot-key">verified boot key ID</a>:</p>
+                match DiamaneOS's <a href="/documentation/keys/#verified-boot-key" target="_blank" rel="noopener">verified boot key ID</a>:</p>
 
                 <pre>5c4c94ba54e9f4fe81dcfd77e9b919204f0a493593a2677b50498cbcb6cd8f8d</pre>
 
@@ -327,15 +327,15 @@
             <section id="if-a-step-fails">
                 <h2><a href="#if-a-step-fails">If a step fails</a></h2>
 
-                <p>The installer shows the error and a link to <a href="recovery.html">what to do</a>, which
+                <p>The installer shows the error and a link to <a href="recovery.html" target="_blank" rel="noopener">what to do</a>, which
                 covers each case. Do not start Android, and never lock the bootloader to fix a failed install.
-                Add the log below when you <a href="/install/#getting-help">ask for help</a>.</p>
+                Add the log below when you <a href="/install/#getting-help" target="_blank" rel="noopener">ask for help</a>.</p>
             </section>
 
             <section id="returning-to-the-stock-os">
                 <h2><a href="#returning-to-the-stock-os">Returning to the stock OS</a></h2>
 
-                <p>See <a href="stock.html">returning to the stock OS</a>. It
+                <p>See <a href="stock.html" target="_blank" rel="noopener">returning to the stock OS</a>. It
                 installs the device maker's stock OS, then removes the DiamaneOS key before the lock.</p>
             </section>
 
@@ -343,7 +343,7 @@
                 <summary>Log</summary>
 
                 <p>Add this to a report on the
-                <a href="https://github.com/DiamaneOS/issue-tracker" rel="noreferrer">issue
+                <a href="https://github.com/DiamaneOS/issue-tracker" rel="noreferrer" target="_blank">issue
                 tracker</a> when an install fails. It holds no serial numbers.</p>
 
                 <p class="choices">

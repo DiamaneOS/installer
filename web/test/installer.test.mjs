@@ -316,6 +316,27 @@ test("a restart command whose answer is lost to the restart goes on as a restart
     assert.ok(!fake.events.includes("fastboot reboot fastboot"));
 });
 
+test("a USB connection lost while writing says whether the phone may restart", async () => {
+    const pkg = await fixturePackage("fixture");
+    for (const [partition, lost, said] of [["abl_a", "a transfer error", /Do not restart the phone/],
+        ["system_a", "a device gone", /bootloader and firmware are complete.*Reboot to bootloader/]]) {
+        const fake = new FakeDevice();
+        const send = fake.runCommand.bind(fake);
+        fake.runCommand = async (text) => {
+            if (text === `flash:${partition}`) {
+                fake.device.transferOut = LOST[lost];
+            }
+            return send(text);
+        };
+        await assert.rejects(new Flow(fake, restarting(fake), FAST).install(pkg), (error) => {
+            assert.equal(error.name, "PhoneError", partition);
+            assert.match(error.message, new RegExp(`lost while writing ${partition}\\.`), partition);
+            assert.match(error.message, said, partition);
+            return true;
+        });
+    }
+});
+
 test("a test build is locked only when its warning was ticked before the install", async () => {
     const pkg = await fixturePackage("fixture");
     assert.deepEqual(pkg.lockSteps.map(command), expected("fixture-lock"));
@@ -956,18 +977,29 @@ test("a step that is done is greyed out and says so, until that no longer holds"
     assert.ok(Object.values(at({ busy: true })).every((button) => !button.enabled));
 });
 
-test("the page may connect only to the release host, and leaving it asks while a phone is connected", () => {
+test("the page may connect only to the release host, its help opens in a new tab, and leaving it asks while a phone is connected", () => {
     const web = new URL("../", import.meta.url);
     const conf = readFileSync(new URL("nginx/installer.conf", web), "utf8");
     const csp = conf.match(/Content-Security-Policy "([^"]+)"/)[1];
     assert.match(csp, new RegExp(`(^|; )connect-src ${RELEASES};`));
     const page = readFileSync(new URL("index.html", web), "utf8");
-    const links = [...page.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]).filter((tag) => !/href="#/.test(tag)
+    const tags = (html) => [...html.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]).filter((tag) => !/href="#/.test(tag)
         && !tag.includes('class="skip"'));
-    assert.ok(links.length > 10);
-    // Links open in this tab. The browser's own question guards a connected phone or a failed step.
-    assert.deepEqual(links.filter((tag) => tag.includes('target="_blank"')), []);
+    const main = page.slice(page.indexOf("<main"), page.indexOf("</main>"));
+    const help = tags(main);
+    assert.ok(help.length > 5);
+    // Links in the text open a new tab, so that the page keeps its log and download, without access back to it.
+    for (const tag of help) {
+        assert.match(tag, /target="_blank"/, tag);
+        assert.match(tag, /rel="(noopener|noreferrer)"/, tag);
+    }
+    // The site's header and footer open in this tab. The browser's own question guards a connected phone or a
+    // failed step there.
+    const outside = tags(page.slice(0, page.indexOf("<main")) + page.slice(page.indexOf("</main>")));
+    assert.ok(outside.length > 5);
+    assert.deepEqual(outside.filter((tag) => tag.includes('target="_blank"')), []);
     const script = readFileSync(new URL("js/install.js", web), "utf8");
+    assert.match(script, /link\.href = "recovery\.html";\s*\/\/[^\n]*\n\s*link\.target = "_blank";\s*link\.rel = "noopener";/);
     assert.match(script, /if \(busy \|\| failed \|\| device\.isConnected\) \{\s*event\.preventDefault\(\);/);
 });
 

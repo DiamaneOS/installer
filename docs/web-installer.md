@@ -144,6 +144,14 @@ The bootloader stops answering when a reply to a command is cut off, and only a 
   unlocked, the set's slot active and `flashing get_unlock_ability` 1. Only then does it offer the
   lock, and only to the install that just ran in the same page. If a check fails, the lock stays
   off and the message says why.
+- The phone can leave USB before its answer to a restart, unlock or lock command arrives. When
+  the command went out and only reading the answer failed, the installer goes on as after the
+  restart and checks the phone once it is back. The last lock cannot be checked, so the page says
+  that it cannot tell and points to the colour of the start screen.
+- A USB connection lost while writing stops the install with what to do. In Fastboot Mode the
+  bootloader or firmware may be only partly written, so the phone must not restart before the
+  next install. In fastbootd it may.
+- Links in the page's text open in a new tab, so that the page keeps its log and download.
 
 ## fastbootd
 
