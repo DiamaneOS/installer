@@ -25,6 +25,8 @@ GrapheneOS's web installer and runs the same steps as the image set's `flash-all
   firmware. The bootloader cannot report it.
 - Copies an image's AVB footer to the end of a larger partition, as platform-tools `fastboot` does.
 - Keeps a log without serial numbers for reports, with buttons to copy it or save it as a text file.
+  Each read of the phone's state goes into it: the model, Fastboot Mode or fastbootd, and the lock
+  states. The page stores nothing, so each error points to the log before a reload loses it.
 - Links open in the same tab. While a phone is connected, a step runs or the last step failed, the browser asks before leaving the page.
 
 ## Release download

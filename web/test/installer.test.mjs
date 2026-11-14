@@ -316,6 +316,25 @@ test("a restart command whose answer is lost to the restart goes on as a restart
     assert.ok(!fake.events.includes("fastboot reboot fastboot"));
 });
 
+test("each read of the phone's state goes into the log, without its serial number", async () => {
+    const fake = new FakeDevice();
+    const logged = [];
+    const flow = new Flow(fake, { ...ui, log: (line) => logged.push(line) }, FAST);
+    await flow.state();
+    fake.critical = false;
+    fake.ability = 0;
+    await flow.state();
+    fake.responses.set("flashing get_unlock_ability", new Error("no answer"));
+    fake.mode = "fastbootd";
+    await flow.state();
+    assert.deepEqual(logged.filter((line) => line.startsWith("Phone: ")), [
+        "Phone: FP6, Fastboot Mode, bootloader unlocked, critical partitions unlocked, unlocking allowed",
+        "Phone: FP6, Fastboot Mode, bootloader unlocked, critical partitions locked, unlocking not allowed (0)",
+        "Phone: FP6, fastbootd",
+    ]);
+    assert.ok(!fake.sent.includes("getvar:serialno"));
+});
+
 test("a USB connection lost while writing says whether the phone may restart", async () => {
     const pkg = await fixturePackage("fixture");
     for (const [partition, lost, said] of [["abl_a", "a transfer error", /Do not restart the phone/],

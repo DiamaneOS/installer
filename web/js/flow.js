@@ -213,6 +213,12 @@ export class Flow {
         }
         const state = { product, userspace, unlocked, critical, ability };
         this.#known = { state, usb: this.#device.device };
+        // The model and the lock states, never the serial number.
+        const told = (value, text) => (value === null ? "not reported" : text);
+        this.#ui.log(`Phone: ${product ?? "no product"}, ${userspace === "yes" ? "fastbootd" : "Fastboot Mode"}`
+            + (userspace === "yes" ? "" : `, bootloader ${unlocked === "yes" ? "unlocked" : "locked"}`
+                + `, critical partitions ${told(critical, critical ? "unlocked" : "locked")}`
+                + `, unlocking ${told(ability, ability === 1 ? "allowed" : `not allowed (${ability})`)}`));
         return state;
     }
 
