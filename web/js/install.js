@@ -151,7 +151,8 @@ async function reconnect(message, seconds = 30, back = Infinity, choose = false)
                     resolve(false);
                 } else if (button.hidden && Date.now() > ask) {
                     setStatus(`${message} ${choose
-                        ? "Once it shows fastbootd, press Connect again and choose the phone."
+                        ? "If it shows fastbootd and the installer does not continue on its own, press Connect again and "
+                            + "choose the phone."
                         : "If it is back in Fastboot Mode and the installer does not continue, press Connect again."}`);
                     statusLine?.after(button);
                     button.hidden = false;
