@@ -346,8 +346,8 @@ function recoveryLink(statusField) {
     // A new tab, so that this page keeps its log and download.
     link.target = "_blank";
     link.rel = "noopener";
-    link.textContent = "What to do now";
-    statusField.append(" ", link);
+    link.textContent = "Further troubleshooting";
+    statusField.append(document.createElement("br"), link);
 }
 
 // The page keeps nothing, so a reload or another page loses the log.
@@ -358,7 +358,7 @@ function logHint(statusField) {
     link.onclick = () => {
         document.getElementById("log-section").open = true;
     };
-    statusField.append(" Before you reload or leave this page, ", link, ".");
+    statusField.append(document.createElement("br"), "Before you reload or leave this page, ", link, ".");
 }
 
 function addButtonHook(id, callback, { recovery = false } = {}) {
