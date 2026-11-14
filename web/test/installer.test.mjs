@@ -61,6 +61,7 @@ class FakeDevice {
     constructor(stall = () => false, drop = () => false) {
         this.stall = stall;
         this.drop = drop;
+        this.lost = "a transfer error";
         this.mode = "bootloader";
         this.product = "FP6";
         this.unlocked = "yes";
@@ -92,7 +93,7 @@ class FakeDevice {
         }
         const usb = {
             transferOut: async () => ({ status: "ok" }),
-            transferIn: () => (usb.stalled ? new Promise(() => {}) : usb.dropped ? FAILS["a transfer error"]()
+            transferIn: () => (usb.stalled ? new Promise(() => {}) : usb.dropped ? LOST[this.lost]()
                 : Promise.resolve({})),
             close: async () => {
                 usb.closed = true;
@@ -249,13 +250,23 @@ test("the install steps are those of the tools' flash_all.py and flash-all.sh", 
     }
 });
 
+// How the answer to a restart command can be lost: the phone leaves USB while
+// the browser reads it, or before the read starts.
+const LOST = {
+    "a transfer error": () => Promise.reject(new DOMException(
+        "Failed to execute 'transferIn' on 'USBDevice': A transfer error has occurred.", "NetworkError")),
+    "a device gone": () => Promise.reject(new DOMException(
+        "Failed to execute 'transferIn' on 'USBDevice': The device was disconnected.", "NotFoundError")),
+};
+
 test("a restart command whose answer is lost to the restart goes on as a restart", async () => {
     // The phone leaves USB before its OKAY reaches the browser, after each command that restarts it.
     const restarts = new Set(["reboot-fastboot", "reboot-bootloader", "reboot", "flashing unlock",
         "flashing unlock_critical", "flashing lock_critical", "flashing lock"]);
-    for (const name of FIXTURES) {
+    for (const [name, lost] of FIXTURES.flatMap((name) => Object.keys(LOST).map((lost) => [name, lost]))) {
         const pkg = await fixturePackage(name);
         const fake = new FakeDevice(() => false, (text) => restarts.has(text));
+        fake.lost = lost;
         fake.unlocked = "no";
         fake.critical = false;
         const logged = [];
@@ -276,12 +287,20 @@ test("a restart command whose answer is lost to the restart goes on as a restart
             expected(name).filter((line) => line !== "fastboot snapshot-update cancel"), name);
         assert.ok(logged.some((line) => line.startsWith("The phone left USB before its answer arrived")), name);
         if (name === "fixture-relock") {
+            // The critical lock is checked once the phone is back. The last lock cannot be, so the page says so.
             await flow.lockCritical(pkg);
-            await flow.lock(pkg);
+            await assert.rejects(flow.lock(pkg), /cannot tell whether the lock was confirmed/, name);
             assert.deepEqual(fake.sent.filter((text) => text.startsWith("flashing lock")),
                 ["flashing lock_critical", "flashing lock"], name);
         }
     }
+    // Another failed read stops the install, as before.
+    const other = new FakeDevice(() => false, (text) => text === "reboot-fastboot");
+    other.lost = "other";
+    LOST.other = () => Promise.reject(new DOMException("Failed to execute 'transferIn'", "InvalidStateError"));
+    await assert.rejects(new Flow(other, restarting(other), FAST).install(await fixturePackage("fixture")),
+        { name: "InvalidStateError" });
+    delete LOST.other;
     // A failed send is no restart: the install stops there.
     const pkg = await fixturePackage("fixture");
     const fake = new FakeDevice();

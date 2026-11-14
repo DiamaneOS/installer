@@ -17,6 +17,8 @@ const LOCK_AGAIN = "It cannot be locked now. Install again, then lock straight a
 
 // What WebUSB throws when a transfer fails, for example "A transfer error has occurred".
 const TRANSFER_ERROR = "NetworkError";
+// What it throws for a transfer started after the phone left USB.
+const GONE_ERROR = "NotFoundError";
 
 export class PhoneError extends Error {
     constructor(message) {
@@ -159,7 +161,8 @@ export class Flow {
     // Sends a command after which the phone restarts. The phone may leave USB
     // before its answer reaches the browser, which then reports a transfer
     // error on reading it. The command went out, so the restart is under way,
-    // and what follows waits for the phone and checks it again.
+    // and what follows waits for the phone and checks it again. Resolves to
+    // false when the answer was lost this way.
     async #restarting(text, seconds = this.#seconds.command) {
         this.#watch();
         const state = this.#transfers.get(this.#device.device);
@@ -168,11 +171,13 @@ export class Flow {
         }
         try {
             await this.#call(() => this.#device.runCommand(text), seconds);
+            return true;
         } catch (error) {
-            if (error.name !== TRANSFER_ERROR || state?.failed !== "transferIn") {
+            if (![TRANSFER_ERROR, GONE_ERROR].includes(error.name) || state?.failed !== "transferIn") {
                 throw error;
             }
             this.#ui.log("The phone left USB before its answer arrived, as it does when it restarts quickly");
+            return false;
         }
     }
 
@@ -409,10 +414,11 @@ export class Flow {
         return state;
     }
 
+    // Resolves to false when the phone left USB before it answered.
     async #lockCommand(text) {
         this.#ui.log(`fastboot ${text}`);
         try {
-            await this.#restarting(text, this.#seconds.confirm);
+            return await this.#restarting(text, this.#seconds.confirm);
         } catch (error) {
             if (error.name === "FastbootError" && error.status === "FAIL") {
                 throw new PhoneError(`The bootloader refused: ${error.bootloaderMessage.trim()}`);
@@ -549,12 +555,18 @@ export class Flow {
             throw new PhoneError("The critical partitions are unlocked. Install again, then lock.");
         }
         this.#installed = null;
-        await this.#lockCommand("flashing lock");
+        const answered = await this.#lockCommand("flashing lock");
         const left = await this.#ui.leave(`${CONFIRM_LOCK} It erases all data and starts DiamaneOS.`,
             this.#seconds.confirm);
         if (!left) {
             throw new PhoneError("The phone did not restart, so the lock was not confirmed. The bootloader stays "
                 + "unlocked. To lock it, install again and lock straight after.");
+        }
+        // Nothing can check the phone after this lock, so a lost answer leaves it open.
+        if (!answered) {
+            throw new PhoneError("The phone left USB before it answered, so the installer cannot tell whether the "
+                + "lock was confirmed. The warning screen at each start shows it: yellow means the bootloader is "
+                + "locked, orange means it is still unlocked.");
         }
     }
 }
